@@ -1,0 +1,207 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Property Management Dashboard Design System - Professional Real Estate Theme */
+
+@layer base {
+  :root {
+    /* Core Background & Text */
+    --background: 0 0% 100%;
+    --foreground: 215 25% 27%;
+
+    /* Card & Surface Colors */
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 27%;
+    --card-header: 0 80% 20%;
+    /* dark red for headers */
+
+    /* Popover Colors */
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 27%;
+
+    /* Primary Brand Colors - Professional Real Estate Red (#a5291b) */
+    --primary: 0 66% 38%;
+    /* hsl of #a5291b */
+    --primary-foreground: 0 0% 98%;
+    --primary-light: 0 66% 48%;
+    /* lighter red */
+    --primary-lighter: 0 66% 65%;
+    /* much lighter red */
+
+    /* Secondary Colors - Elegant Neutral Gray */
+    --secondary: 215 16% 47%;
+    --secondary-foreground: 0 0% 98%;
+    --secondary-light: 215 20% 65%;
+    --secondary-lighter: 215 25% 85%;
+
+    /* Muted Colors */
+    --muted: 215 16% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    /* Accent Colors - Complementary Gold/Orange */
+    --accent: 32 95% 45%;
+    /* a golden orange */
+    --accent-foreground: 0 0% 98%;
+    --accent-light: 32 95% 60%;
+    --accent-lighter: 32 95% 75%;
+
+    /* Status Colors */
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+    --success-light: 142 69% 58%;
+
+    --warning: 48 96% 53%;
+    --warning-foreground: 25 5% 15%;
+    --warning-light: 48 100% 67%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --destructive-light: 0 93% 73%;
+
+    /* Interactive Elements */
+    --border: 215 16% 92%;
+    --input: 215 16% 92%;
+    --ring: 0 66% 38%;
+    /* red ring */
+
+    /* Radius */
+    --radius: 0.75rem;
+
+    /* Sidebar Specific */
+    --sidebar-background: 0 66% 38%;
+    /* red sidebar */
+    --sidebar-foreground: 215 16% 96%;
+    --sidebar-primary: 32 95% 45%;
+    /* gold accent */
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 0 70% 30%;
+    --sidebar-accent-foreground: 215 16% 96%;
+    --sidebar-border: 0 60% 25%;
+    --sidebar-ring: 32 95% 45%;
+
+    /* Professional Gradients */
+    --gradient-primary: linear-gradient(135deg, hsl(0 66% 38%), hsl(0 66% 48%));
+    --gradient-secondary: linear-gradient(135deg, hsl(215 16% 47%), hsl(215 20% 65%));
+    --gradient-accent: linear-gradient(135deg, hsl(32 95% 45%), hsl(32 95% 60%));
+    --gradient-success: linear-gradient(135deg, hsl(142 76% 36%), hsl(142 69% 58%));
+    --gradient-hero: linear-gradient(135deg, hsl(0 66% 38%) 0%, hsl(0 66% 48%) 50%, hsl(32 95% 45%) 100%);
+    --gradient-card: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(215 16% 98%) 100%);
+
+    /* Elegant Shadows */
+    --shadow-card: 0 4px 6px -1px hsl(0 66% 38% / 0.1), 0 2px 4px -1px hsl(0 66% 38% / 0.06);
+    --shadow-card-hover: 0 10px 15px -3px hsl(0 66% 38% / 0.1), 0 4px 6px -2px hsl(0 66% 38% / 0.05);
+    --shadow-primary: 0 10px 30px -10px hsl(0 66% 38% / 0.3);
+    --shadow-accent: 0 10px 30px -10px hsl(32 95% 45% / 0.3);
+
+    /* Smooth Transitions */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-fast: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 0 66% 50%;
+    /* lighter red in dark mode */
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 32 95% 55%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 0 66% 50%;
+    --sidebar-background: 0 66% 25%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 32 95% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 66% 20%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 0 66% 15%;
+    --sidebar-ring: 32 95% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+
+  .gradient-card {
+    background: var(--gradient-card);
+  }
+
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+
+  .shadow-primary {
+    box-shadow: var(--shadow-primary);
+  }
+
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+
+  .transition-fast {
+    transition: var(--transition-fast);
+  }
+
+  .stats-card {
+    @apply bg-card border border-border rounded-lg p-6 shadow-card transition-smooth hover:shadow-card-hover;
+  }
+
+  .stats-card-gradient {
+    @apply relative overflow-hidden;
+  }
+
+  .stats-card-gradient::before {
+    content: '';
+    @apply absolute inset-0 opacity-5;
+    background: var(--gradient-accent);
+  }
+
+  .nav-active {
+    @apply bg-sidebar-accent text-sidebar-accent-foreground font-medium;
+  }
+
+  .nav-inactive {
+    @apply text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-smooth;
+  }
+}
