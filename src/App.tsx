@@ -3,16 +3,20 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import PropertyTypes from "./pages/PropertyTypes";
 import Properties from "./pages/Properties";
 import Enquiries from "./pages/Enquiries";
 import Amenities from "./pages/Amenities";
+import AmenitiesType from "./pages/Amenitiestype";
+import Users from "./pages/Users";
+
 import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
-import { AuthProvider } from "./context/AuthContext"; // 👈 import here
-import Users from "./pages/Users";
+
+import { AuthProvider } from "./context/AuthContext";
 
 const queryClient = new QueryClient();
 
@@ -21,12 +25,21 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+
       <BrowserRouter>
-        {/* 👇 Wrap everything inside AuthProvider */}
         <AuthProvider>
           <Routes>
+
+            {/* Login */}
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+            {/* Default */}
+            <Route
+              path="/"
+              element={<Navigate to="/dashboard" replace />}
+            />
+
+            {/* Dashboard */}
             <Route
               path="/dashboard"
               element={
@@ -35,6 +48,8 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
+            {/* Property Types */}
             <Route
               path="/property-types"
               element={
@@ -43,6 +58,8 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
+            {/* Properties */}
             <Route
               path="/properties"
               element={
@@ -51,6 +68,8 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
+            {/* Enquiries */}
             <Route
               path="/enquiries"
               element={
@@ -59,6 +78,8 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
+            {/* Amenities */}
             <Route
               path="/amenities"
               element={
@@ -67,6 +88,18 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
+            {/* Amenities Type */}
+            <Route
+              path="/amenitiestype"
+              element={
+                <DashboardLayout>
+                  <AmenitiesType />
+                </DashboardLayout>
+              }
+            />
+
+            {/* Users */}
             <Route
               path="/users"
               element={
@@ -75,8 +108,13 @@ const App = () => (
                 </DashboardLayout>
               }
             />
+
             {/* Catch-all */}
-            <Route path="*" element={<NotFound />} />
+            <Route
+              path="*"
+              element={<NotFound />}
+            />
+
           </Routes>
         </AuthProvider>
       </BrowserRouter>

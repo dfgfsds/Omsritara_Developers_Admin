@@ -32,8 +32,10 @@ const menuItems = [
   { title: "Properties", url: "/properties", icon: Building2 },
   { title: "Enquiries", url: "/enquiries", icon: MessageCircle },
   { title: "Property Types", url: "/property-types", icon: Building },
-  { title: "Amenities", url: "/amenities", icon: Star },
+  {title: "amenities Type", url:"/amenitiestype",icon: Star},
   { title: "Users", url: "/users", icon: User },
+  { title: "Amenities", url: "/amenities", icon: Star },
+  
 ];
 
 export function AppSidebar() {
