@@ -202,8 +202,8 @@ const Amenities = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {amenities?.result?.map((amenity) => (
-                  <TableRow key={amenity.id}>
+                {amenities?.result?.map((amenity: any, index: number) => (
+                  <TableRow key={amenity._id || amenity.id || index}>
                     <TableCell>
                       <div className="font-medium text-card-header">
                         {amenity.name}

@@ -13,6 +13,7 @@ import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./context/AuthContext"; // 👈 import here
 import Users from "./pages/Users";
+import Blogs from "./pages/Blog";
 
 const queryClient = new QueryClient();
 
@@ -66,6 +67,14 @@ const App = () => (
                   <Amenities />
                 </DashboardLayout>
               }
+            />
+            <Route
+               path="/blogs"
+               element={
+                   <DashboardLayout>
+                      <Blogs />
+                  </DashboardLayout>
+                }
             />
             <Route
               path="/users"

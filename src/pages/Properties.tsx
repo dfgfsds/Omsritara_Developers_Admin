@@ -1,595 +1,1565 @@
-import { useEffect, useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Plus, Edit, Trash2, Eye, MapPin, Ruler, DollarSign } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import React, { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import axiosInstance from "@/lib/axiosInstance";
-import Select from "react-select";
-import axios from "axios";
+import {
+  Plus,
+  Building2,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  FileText,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
+import {
+  Property,
+  PropertyType,
+  Amenity,
+  AmenityType,
+  PropertyFormData,
+  FormAmenityData,
+  FormNearbyPlace,
+  Stats,
+} from "@/components/properties/types";
+import { emptyFormData } from "@/components/properties/constants";
+import { PropertyStatsCards } from "@/components/properties/PropertyStatsCards";
+import { PropertyFilters } from "@/components/properties/PropertyFilters";
+import { PropertyCard } from "@/components/properties/PropertyCard";
+import { PropertyTable } from "@/components/properties/PropertyTable";
+import { PropertyQuickViewDialog } from "@/components/properties/PropertyQuickViewDialog";
+import { PropertyDeleteDialog } from "@/components/properties/PropertyDeleteDialog";
+import { AmenityDetailsDialog } from "@/components/properties/AmenityDetailsDialog";
+import { PropertyFormDialog } from "@/components/properties/form/PropertyFormDialog";
+
+const propertyStatusCycle: Record<string, "available" | "under_construction" | "sold"> = {
+  available: "under_construction",
+  under_construction: "sold",
+  sold: "available",
+};
 
 const Properties = () => {
+  const [searchParams] = useSearchParams();
+  const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
-  const propertyStatusCycle: Record<string, string> = {
-    available: "sold",
-    sold: "under_construction",
-    under_construction: "available",
-  };
-  const [properties, setProperties] = useState<any[]>([]);
-
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingProperty, setEditingProperty] = useState<any>(null);
-  const [formData, setFormData] = useState({
-    name: "",
-    type: "",
-    description: "",
-    location: {
-      address: "",
-      city: "",
-      state: "",
-      country: "",
-    },
-    area_size: "",
-    price: "",
-    image_url: [],
-    mape_url: "",
-    media_url: "",
-    amenities: [],
-    status: "available",
-    owner_name: "",
-    pincode: ""
+  // --- States ---
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [isDraftView, setIsDraftView] = useState(false);
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    available: 0,
+    sold: 0,
+    underConstruction: 0,
+    featured: 0,
+    verified: 0,
   });
+  const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
+  const [amenities, setAmenities] = useState<Amenity[]>([]);
+  const [amenityTypes, setAmenityTypes] = useState<AmenityType[]>([]);
+  const [amenityTypeCache, setAmenityTypeCache] = useState<Record<string, AmenityType[]>>({});
+  const [selectedAmenity, setSelectedAmenity] = useState("");
+  const [selectedAmenityTypes, setSelectedAmenityTypes] = useState<string[]>([]);
+  const [amenityDropdownOpen, setAmenityDropdownOpen] = useState(false);
+  const [amenityDetailsOpen, setAmenityDetailsOpen] = useState(false);
+  const [viewingAmenity, setViewingAmenity] = useState<FormAmenityData | null>(null);
+  const [editingAmenityIndex, setEditingAmenityIndex] = useState<number | null>(null);
 
+  const [formData, setFormData] = useState<PropertyFormData>(emptyFormData);
+  const [formActiveTab, setFormActiveTab] = useState<string>("basic");
+  const [editingProperty, setEditingProperty] = useState<Property | null>(null);
+  const [open, setOpen] = useState(false);
 
-  const { toast } = useToast();
-  const [propertyTypes, setPropertyTypes] = useState<any[]>([]);
-  const [amenitiesList, setAmenitiesList] = useState<any[]>([]);
+  // Quick View Modal State
+  const [quickViewProperty, setQuickViewProperty] = useState<Property | null>(null);
+  const [quickViewActiveImage, setQuickViewActiveImage] = useState<number>(0);
 
+  // Filters & View State
+  const [searchQuery, setSearchQuery] = useState(urlSearch);
+
+  useEffect(() => {
+    const q = searchParams.get("search") || searchParams.get("q");
+    if (q !== null && q !== undefined) {
+      setSearchQuery(q);
+    }
+  }, [searchParams]);
+
+  const [filterType, setFilterType] = useState("all");
+  const [filterListing, setFilterListing] = useState("all");
+  const [filterStatus, setFilterStatus] = useState("all");
+  const [filterHighlight, setFilterHighlight] = useState("all");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
+
+  // Loading & Alert States
+  const [loading, setLoading] = useState(false);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [messageOpen, setMessageOpen] = useState(false);
+  const [messageTitle, setMessageTitle] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
+
+  const showMessage = (
+    type: "success" | "error",
+    title: string,
+    text: string
+  ) => {
+    setMessageType(type);
+    setMessageTitle(title);
+    setMessageText(text);
+    setMessageOpen(true);
+  };
+
+  const getErrorMessage = (error: any, fallback: string) => {
+    if (typeof error?.response?.data?.message === "string")
+      return error.response.data.message;
+    if (typeof error?.response?.data?.error === "string")
+      return error.response.data.error;
+    if (typeof error?.message === "string") return error.message;
+    return fallback;
+  };
+
+  // --- API Calls ---
 
   const fetchPropertyTypes = async () => {
     try {
-      const res = await axiosInstance.get("/type/property/");
-      setPropertyTypes(res.data?.result || []); // adjust based on API response
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch property types",
-        variant: "destructive",
-      });
+      const response = await axiosInstance.get("/type/property");
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      setPropertyTypes(Array.isArray(result) ? result : []);
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Property Types Error",
+        getErrorMessage(error, "Failed to fetch property types.")
+      );
     }
   };
 
   const fetchAmenities = async () => {
     try {
-      const res = await axiosInstance.get("/amenities/"); // adjust endpoint if different
-      setAmenitiesList(res.data?.result || []);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch amenities",
-        variant: "destructive",
+      const [amenitiesRes, typeRes] = await Promise.allSettled([
+        axiosInstance.get("/amenities"),
+        axiosInstance.get("/type"),
+      ]);
+
+      const list1 =
+        amenitiesRes.status === "fulfilled"
+          ? amenitiesRes.value?.data?.result ||
+            amenitiesRes.value?.data?.data ||
+            amenitiesRes.value?.data ||
+            []
+          : [];
+      const list2 =
+        typeRes.status === "fulfilled"
+          ? typeRes.value?.data?.result ||
+            typeRes.value?.data?.data ||
+            typeRes.value?.data ||
+            []
+          : [];
+
+      const mergedMap = new Map<string, Amenity>();
+      (Array.isArray(list1) ? list1 : []).forEach((item: any) => {
+        if (item?._id && item?.name) {
+          mergedMap.set(item.name.toUpperCase().trim(), {
+            _id: item._id,
+            name: item.name,
+          });
+        }
       });
+      (Array.isArray(list2) ? list2 : []).forEach((item: any) => {
+        if (item?._id && item?.name) {
+          const key = item.name.toUpperCase().trim();
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, {
+              _id: item._id,
+              name: item.name,
+            });
+          }
+        }
+      });
+
+      const merged = Array.from(mergedMap.values()).sort((a, b) =>
+        a.name.localeCompare(b.name)
+      );
+      setAmenities(merged);
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Amenities Error",
+        getErrorMessage(error, "Failed to fetch amenities.")
+      );
+    }
+  };
+
+  const fetchAmenityTypes = async (
+    amenityId: string,
+    updateCurrent = true
+  ) => {
+    if (!amenityId) {
+      if (updateCurrent) setAmenityTypes([]);
+      return [];
+    }
+
+    try {
+      const response = await axiosInstance.get(`/type?amenities=${amenityId}`);
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      const list = Array.isArray(result) ? result : [];
+
+      setAmenityTypeCache((prev) => ({
+        ...prev,
+        [amenityId]: list,
+      }));
+
+      if (updateCurrent) setAmenityTypes(list);
+      return list;
+    } catch (error: any) {
+      if (updateCurrent) setAmenityTypes([]);
+      showMessage(
+        "error",
+        "Amenities Error",
+        getErrorMessage(error, "Failed to fetch related amenities.")
+      );
+      return [];
+    }
+  };
+
+  const fetchProperties = async (draftMode = isDraftView) => {
+    try {
+      setLoading(true);
+      const url = draftMode ? "/property?status=draft" : "/property";
+      const response = await axiosInstance.get(url);
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      setProperties(Array.isArray(result) ? result : []);
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Properties Error",
+        getErrorMessage(error, "Failed to fetch properties.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPropertyStats = async () => {
+    try {
+      const response = await axiosInstance.get("/property/stats");
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      if (result) {
+        setStats({
+          total: Number(result.total) || 0,
+          available: Number(result.available) || 0,
+          underConstruction: Number(result.under_construction) || 0,
+          sold: Number(result.sold) || 0,
+          featured: Number(result.featured) || 0,
+          verified: Number(result.verified) || 0,
+          draft: Number(result.draft) || 0,
+        });
+      }
+    } catch (error: any) {
+      console.error(
+        "Property Stats Error:",
+        getErrorMessage(error, "Failed to fetch property stats.")
+      );
     }
   };
 
   useEffect(() => {
     fetchPropertyTypes();
-  }, []);
-
-  useEffect(() => {
     fetchAmenities();
+    fetchPropertyStats();
   }, []);
 
-  // Fetch properties on mount
   useEffect(() => {
-    fetchProperties();
-  }, []);
+    fetchProperties(isDraftView);
+  }, [isDraftView]);
 
-  const fetchProperties = async () => {
-    try {
-      const res = await axiosInstance.get("/property");
-      setProperties(res.data?.result || []);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch properties",
-        variant: "destructive",
-      });
-    }
+  // --- Handlers & Helpers ---
+
+  const resetAmenitySelector = () => {
+    setSelectedAmenity("");
+    setSelectedAmenityTypes([]);
+    setAmenityDropdownOpen(false);
+    setAmenityTypes([]);
+    setEditingAmenityIndex(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const resetForm = () => {
+    setFormData({
+      ...emptyFormData,
+      image_url: [],
+      amenities_data: [],
+      nearby_places: [],
+    });
+    setFormActiveTab("basic");
+    resetAmenitySelector();
+    setAmenityTypeCache({});
+    setEditingProperty(null);
+  };
 
-    const propertyData = {
-      ...formData,
-      area_size: parseInt(formData.area_size),
-      price: parseFloat(formData.price),
-      image_url: formData.image_url,
-      amenities: formData.amenities,
+  const handleInputChange = (field: keyof PropertyFormData, value: any) =>
+    setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const handleLocationChange = (
+    field: "address" | "area" | "city" | "state" | "country" | "pincode",
+    value: string
+  ) => setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const selectedPropertyType = useMemo(
+    () => propertyTypes.find((type) => type._id === formData.type)?.name || "",
+    [propertyTypes, formData.type]
+  );
+
+  const propertyTypeFields = useMemo(() => {
+    const type = selectedPropertyType.toLowerCase().trim();
+    const isLand = /plot|land|site|farm|agricultural/.test(type);
+    const isCommercial =
+      /office|shop|showroom|warehouse|commercial|retail|industrial|godown/.test(type);
+
+    if (!type || isLand) {
+      return {
+        category: isLand ? "land" : "general",
+        bedrooms: false,
+        bathrooms: false,
+        balconies: false,
+        floor_number: false,
+        total_floors: false,
+        property_age: false,
+        furnishing: false,
+        facing: false,
+        construction_status: false,
+        possession_date: false,
+        parking: true,
+        price_per_sqft: true,
+      };
+    }
+    if (isCommercial) {
+      return {
+        category: "commercial",
+        bedrooms: false,
+        bathrooms: false,
+        balconies: false,
+        floor_number: true,
+        total_floors: true,
+        property_age: true,
+        furnishing: false,
+        facing: true,
+        construction_status: true,
+        possession_date: true,
+        parking: true,
+        price_per_sqft: true,
+      };
+    }
+    return {
+      category: "residential",
+      bedrooms: true,
+      bathrooms: true,
+      balconies: true,
+      floor_number: true,
+      total_floors: true,
+      property_age: true,
+      furnishing: true,
+      facing: true,
+      construction_status: true,
+      possession_date: true,
+      parking: true,
+      price_per_sqft: true,
     };
+  }, [selectedPropertyType]);
 
-    try {
-      if (editingProperty) {
-        // Update
-        await axiosInstance.put(`/property/${editingProperty._id}`, propertyData);
-        toast({ title: "Updated", description: "Property updated successfully" });
-      } else {
-        // Create
-        await axiosInstance.post(`/property`, propertyData);
-        toast({ title: "Created", description: "Property created successfully" });
-      }
-      setIsDialogOpen(false);
-      setEditingProperty(null);
-      fetchProperties(); // refresh list
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Something went wrong while saving property",
-        variant: "destructive",
-      });
+  const handlePropertyTypeChange = (value: string) => {
+    const propertyType = propertyTypes.find((type) => type._id === value);
+    const name = propertyType?.name?.toLowerCase() || "";
+    const isLand = /plot|land|site|farm|agricultural/.test(name);
+    const isCommercial =
+      /office|shop|showroom|warehouse|commercial|retail|industrial/.test(name);
+
+    setFormData((prev) => ({
+      ...prev,
+      type: value,
+      ...(isLand
+        ? {
+            bedrooms: "",
+            bathrooms: "",
+            balconies: "",
+            floor_number: "",
+            total_floors: "",
+            property_age: "",
+            furnishing: "",
+            facing: "",
+            construction_status: "",
+            possession_date: "",
+          }
+        : isCommercial
+        ? { bedrooms: "", bathrooms: "", balconies: "", furnishing: "" }
+        : {}),
+    }));
+    resetAmenitySelector();
+  };
+
+  const handleAmenitySelect = async (amenityId: string) => {
+    setSelectedAmenity(amenityId);
+    setSelectedAmenityTypes([]);
+    setAmenityDropdownOpen(false);
+
+    const cached = amenityTypeCache[amenityId];
+    if (cached) {
+      setAmenityTypes(cached);
+    } else {
+      await fetchAmenityTypes(amenityId);
     }
   };
 
-  const handleEdit = (property: any) => {
+  const toggleAmenityType = (id: string) => {
+    setSelectedAmenityTypes((prev) =>
+      prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : [...prev, id]
+    );
+  };
+
+  const addAmenity = () => {
+    if (!selectedAmenity || selectedAmenityTypes.length === 0) return;
+
+    setFormData((prev) => {
+      const updated = [...prev.amenities_data];
+      const existingIndex =
+        editingAmenityIndex !== null
+          ? editingAmenityIndex
+          : updated.findIndex((item) => item.amenities === selectedAmenity);
+
+      if (existingIndex > -1) {
+        updated[existingIndex] = {
+          amenities: selectedAmenity,
+          amenity_types: selectedAmenityTypes,
+        };
+        return {
+          ...prev,
+          amenities_data: updated,
+        };
+      }
+
+      return {
+        ...prev,
+        amenities_data: [
+          ...updated,
+          {
+            amenities: selectedAmenity,
+            amenity_types: selectedAmenityTypes,
+          },
+        ],
+      };
+    });
+
+    resetAmenitySelector();
+  };
+
+  const editAmenity = async (index: number) => {
+    const item = formData.amenities_data[index];
+    if (!item) return;
+
+    setEditingAmenityIndex(index);
+    setSelectedAmenity(item.amenities);
+
+    const cached = amenityTypeCache[item.amenities];
+    if (cached) {
+      setAmenityTypes(cached);
+    } else {
+      await fetchAmenityTypes(item.amenities);
+    }
+
+    setSelectedAmenityTypes([...item.amenity_types]);
+    setAmenityDropdownOpen(false);
+  };
+
+  const viewAmenity = (item: FormAmenityData) => {
+    setViewingAmenity(item);
+    setAmenityDetailsOpen(true);
+  };
+
+  const removeAmenity = (amenityId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      amenities_data: prev.amenities_data.filter(
+        (item) => item.amenities !== amenityId
+      ),
+    }));
+
+    if (selectedAmenity === amenityId) {
+      resetAmenitySelector();
+    }
+  };
+
+  const removeAmenityType = (amenityId: string, amenityTypeId: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      amenities_data: prev.amenities_data
+        .map((item) =>
+          item.amenities !== amenityId
+            ? item
+            : {
+                ...item,
+                amenity_types: item.amenity_types.filter(
+                  (id) => id !== amenityTypeId
+                ),
+              }
+        )
+        .filter((item) => item.amenity_types.length > 0),
+    }));
+  };
+
+  const getAmenityName = (id: string) =>
+    amenities.find((amenity) => amenity._id === id)?.name || id;
+
+  const getAmenityTypeName = (amenityId: string, typeId: string) =>
+    (amenityTypeCache[amenityId] || []).find((type) => type._id === typeId)
+      ?.name ||
+    (amenityId === selectedAmenity
+      ? amenityTypes.find((type) => type._id === typeId)?.name
+      : undefined) ||
+    typeId;
+
+  const handleEdit = async (property: Property) => {
     setEditingProperty(property);
 
+    const mappedAmenities: FormAmenityData[] = (property.amenities_data || [])
+      .map((item: any) => {
+        const rawTypes = item?.amenity_types || item?.amenitie_tyep;
+        const typesList = Array.isArray(rawTypes) ? rawTypes : [];
+        return {
+          amenities:
+            typeof item?.amenities === "string"
+              ? item.amenities
+              : item?.amenities?._id || item?.amemities || "",
+          amenity_types: typesList
+            .map((type: any) => (typeof type === "string" ? type : type?._id))
+            .filter(Boolean),
+        };
+      })
+      .filter((item) => item.amenities);
+
+    const possessionDate = property?.possession_date
+      ? new Date(property.possession_date).toISOString().split("T")[0]
+      : "";
+    const str = (v: any) => (v !== undefined && v !== null ? String(v) : "");
+
     setFormData({
-      name: property.name,
-      type: property.type?._id,
+      name: property.name || "",
+      type: typeof property.type === "string" ? property.type : property.type?._id || "",
+      listing_type: property.listing_type || "sale",
       description: property.description || "",
-      location: {
-        address: property.location.address,
-        city: property.location.city,
-        state: property.location.state,
-        country: property.location.country,
-      },
-      area_size: property.area_size.toString(),
-      price: property.price.toString(),
+      address: property.location?.address || "",
+      area: property.location?.area || "",
+      city: property.location?.city || "",
+      state: property.location?.state || "",
+      country: property.location?.country || "",
+      pincode: property.location?.pincode || property.pincode || "",
+      area_size: str(property.area_size),
+      area_unit: property.area_unit || "sqft",
+      price: str(property.price),
+      price_per_sqft: str(property.price_per_sqft),
+      bedrooms: str(property.bedrooms),
+      bathrooms: str(property.bathrooms),
+      balconies: str(property.balconies),
+      floor_number: str(property.floor_number),
+      total_floors: str(property.total_floors),
+      furnishing: property.furnishing || "",
+      facing: property.facing || "",
+      construction_status: property.construction_status || "",
+      possession_date: possessionDate,
+      property_age: str(property.property_age),
+      parking: str(property.parking),
       image_url: Array.isArray(property.image_url) ? property.image_url : [],
-      mape_url: property?.mape_url || "",
+      map_url: property.map_url || "",
       media_url: property.media_url || "",
-      amenities: property.amenities?.map((ame: any) => ame?._id) || [],
-      status: property.status,
+      amenities_data: mappedAmenities,
+      nearby_places: Array.isArray(property.nearby_places)
+        ? property.nearby_places.map((place) => ({
+            name: place.name || "",
+            type: place.type || "",
+            distance: str(place.distance),
+            distance_unit: place.distance_unit || "km",
+          }))
+        : [],
       owner_name: property.owner_name || "",
-      pincode: property.pincode || ""
+      developer_name: property.developer_name || "",
+      project_name: property.project_name || "",
+      status: property.status || "available",
+      isFeatured: Boolean(property.isFeatured),
+      isVerified: Boolean(property.isVerified),
     });
-    setIsDialogOpen(true);
+
+    setAmenityTypeCache({});
+    setSelectedAmenity("");
+    setSelectedAmenityTypes([]);
+    setAmenityTypes([]);
+    setEditingAmenityIndex(null);
+    setFormActiveTab("basic");
+
+    await Promise.all(
+      mappedAmenities.map((item) => fetchAmenityTypes(item.amenities, false))
+    );
+
+    setOpen(true);
   };
 
-  const handleDelete = async (id: number) => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this property?");
-    if (!confirmDelete) return;
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = event.target.files;
+    if (!files?.length) return;
 
     try {
-      await axiosInstance.delete(`/property/${id}`);
-      toast({ title: "Deleted", description: "Property deleted successfully" });
-      fetchProperties();
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to delete property",
-        variant: "destructive",
-      });
+      setImageUploading(true);
+
+      const uploadedUrls = await Promise.all(
+        Array.from(files).map(async (file) => {
+          const uploadData = new FormData();
+          uploadData.append("image", file);
+
+          const response = await axiosInstance.post(
+            "/upload/property",
+            uploadData
+          );
+
+          const url =
+            response?.data?.result?.image ||
+            response?.data?.result?.url ||
+            response?.data?.result?.path ||
+            response?.data?.image ||
+            response?.data?.url;
+
+          if (!url) {
+            throw new Error("Image URL not received from upload API.");
+          }
+
+          return url;
+        })
+      );
+
+      setFormData((prev) => ({
+        ...prev,
+        image_url: [...prev.image_url, ...uploadedUrls],
+      }));
+
+      showMessage(
+        "success",
+        "Images Uploaded",
+        `${uploadedUrls.length} image${
+          uploadedUrls.length > 1 ? "s" : ""
+        } uploaded successfully.`
+      );
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Upload Failed",
+        getErrorMessage(error, "Image upload failed.")
+      );
+    } finally {
+      setImageUploading(false);
+      event.target.value = "";
     }
   };
 
-  const handleStatusClick = async (id: string, currentStatus: string) => {
-    const newStatus =
-      propertyStatusCycle[currentStatus.toLowerCase()] || "available";
+  const removeImage = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      image_url: prev.image_url.filter((_, i) => i !== index),
+    }));
+  };
 
-    // update UI immediately
+  const addNearbyPlace = (defaultType = "") => {
+    setFormData((prev) => ({
+      ...prev,
+      nearby_places: [
+        ...prev.nearby_places,
+        {
+          name: "",
+          type: defaultType,
+          distance: "",
+          distance_unit: "km",
+        },
+      ],
+    }));
+  };
+
+  const updateNearbyPlace = (
+    index: number,
+    field: keyof FormNearbyPlace,
+    value: string
+  ) => {
+    setFormData((prev) => {
+      const updated = [...prev.nearby_places];
+      updated[index] = {
+        ...updated[index],
+        [field]: value,
+      };
+      return {
+        ...prev,
+        nearby_places: updated,
+      };
+    });
+  };
+
+  const removeNearbyPlace = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      nearby_places: prev.nearby_places.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    if (!formData.name.trim()) {
+      setFormActiveTab("basic");
+      showMessage(
+        "error",
+        "Required Field",
+        "Please enter the property name in Basic Details."
+      );
+      return;
+    }
+
+    if (!formData.type) {
+      setFormActiveTab("basic");
+      showMessage(
+        "error",
+        "Required Field",
+        "Please select a property type."
+      );
+      return;
+    }
+
+    if (!formData.city.trim()) {
+      setFormActiveTab("basic");
+      showMessage(
+        "error",
+        "Required Field",
+        "Please enter the city in Location Details."
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+
+      const toNum = (v: string) => (v === "" ? undefined : Number(v));
+      const propertyData: any = {
+        name: formData.name.trim(),
+        type: formData.type,
+        listing_type: formData.listing_type,
+        description: formData.description,
+        location: {
+          address: formData.address,
+          area: formData.area,
+          city: formData.city,
+          state: formData.state,
+          country: formData.country,
+          pincode: formData.pincode,
+        },
+        area_size: toNum(formData.area_size),
+        area_unit: formData.area_unit,
+        price: toNum(formData.price),
+        price_per_sqft: toNum(formData.price_per_sqft),
+        bedrooms: propertyTypeFields.bedrooms ? toNum(formData.bedrooms) : undefined,
+        bathrooms: propertyTypeFields.bathrooms ? toNum(formData.bathrooms) : undefined,
+        balconies: propertyTypeFields.balconies ? toNum(formData.balconies) : undefined,
+        floor_number: propertyTypeFields.floor_number ? toNum(formData.floor_number) : undefined,
+        total_floors: propertyTypeFields.total_floors ? toNum(formData.total_floors) : undefined,
+        furnishing: propertyTypeFields.furnishing ? formData.furnishing || undefined : undefined,
+        facing: propertyTypeFields.facing ? formData.facing || undefined : undefined,
+        construction_status: propertyTypeFields.construction_status ? formData.construction_status || undefined : undefined,
+        possession_date: propertyTypeFields.possession_date ? formData.possession_date || undefined : undefined,
+        property_age: propertyTypeFields.property_age ? toNum(formData.property_age) : undefined,
+        parking: propertyTypeFields.parking
+          ? formData.parking
+            ? String(formData.parking)
+            : undefined
+          : undefined,
+        amenities_data: formData.amenities_data
+          .filter((item) => item.amenities && item.amenities.trim() !== "")
+          .map((item) => ({
+            amenities: item.amenities,
+            amenity_types: Array.isArray(item.amenity_types)
+              ? item.amenity_types.filter(Boolean)
+              : [],
+          })),
+        nearby_places: formData.nearby_places
+          .filter((p) => p.name && p.name.trim() !== "")
+          .map((p) => ({
+            name: p.name.trim(),
+            type: p.type || "Landmark",
+            distance:
+              p.distance !== "" && !isNaN(Number(p.distance))
+                ? Number(p.distance)
+                : p.distance || "",
+            distance_unit: p.distance_unit || "km",
+          })),
+        image_url: formData.image_url,
+        map_url: formData.map_url,
+        media_url: formData.media_url,
+        pincode: formData.pincode,
+        owner_name: formData.owner_name,
+        developer_name: formData.developer_name,
+        project_name: formData.project_name,
+        status: formData.status,
+        isFeatured: formData.isFeatured,
+        isVerified: formData.isVerified,
+      };
+
+      if (editingProperty?._id) {
+        if (editingProperty.status === "draft") {
+          await axiosInstance.put(
+            `/property/${editingProperty._id}/publish`,
+            propertyData
+          );
+          setOpen(false);
+          resetForm();
+          showMessage(
+            "success",
+            "Property Published",
+            "Draft property is now live and published successfully."
+          );
+        } else {
+          await axiosInstance.put(
+            `/property/${editingProperty._id}`,
+            propertyData
+          );
+          setOpen(false);
+          resetForm();
+          showMessage(
+            "success",
+            "Property Updated",
+            "Property details updated successfully."
+          );
+        }
+      } else {
+        await axiosInstance.post("/property", propertyData);
+        setOpen(false);
+        resetForm();
+        showMessage(
+          "success",
+          "Property Created",
+          "New property added successfully."
+        );
+      }
+
+      await fetchProperties(isDraftView);
+      await fetchPropertyStats();
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Save Failed",
+        getErrorMessage(
+          error,
+          "Something went wrong while saving the property."
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      setLoading(true);
+
+      const toNum = (v: string) => (v === "" ? undefined : Number(v));
+      const draftName =
+        formData.name.trim() ||
+        (editingProperty?.name ? editingProperty.name : "Untitled Draft");
+
+      const draftData: any = {
+        name: draftName,
+        type: formData.type || undefined,
+        listing_type: formData.listing_type || undefined,
+        description: formData.description || undefined,
+        location: {
+          address: formData.address || undefined,
+          area: formData.area || undefined,
+          city: formData.city || undefined,
+          state: formData.state || undefined,
+          country: formData.country || undefined,
+          pincode: formData.pincode || undefined,
+        },
+        area_size: toNum(formData.area_size),
+        area_unit: formData.area_unit,
+        price: toNum(formData.price),
+        price_per_sqft: toNum(formData.price_per_sqft),
+        bedrooms: propertyTypeFields.bedrooms
+          ? toNum(formData.bedrooms)
+          : undefined,
+        bathrooms: propertyTypeFields.bathrooms
+          ? toNum(formData.bathrooms)
+          : undefined,
+        balconies: propertyTypeFields.balconies
+          ? toNum(formData.balconies)
+          : undefined,
+        floor_number: propertyTypeFields.floor_number
+          ? toNum(formData.floor_number)
+          : undefined,
+        total_floors: propertyTypeFields.total_floors
+          ? toNum(formData.total_floors)
+          : undefined,
+        furnishing: propertyTypeFields.furnishing
+          ? formData.furnishing || undefined
+          : undefined,
+        facing: propertyTypeFields.facing
+          ? formData.facing || undefined
+          : undefined,
+        construction_status: propertyTypeFields.construction_status
+          ? formData.construction_status || undefined
+          : undefined,
+        possession_date: propertyTypeFields.possession_date
+          ? formData.possession_date || undefined
+          : undefined,
+        property_age: propertyTypeFields.property_age
+          ? toNum(formData.property_age)
+          : undefined,
+        parking: propertyTypeFields.parking
+          ? formData.parking
+            ? String(formData.parking)
+            : undefined
+          : undefined,
+        amenities_data: formData.amenities_data
+          .filter((item) => item.amenities && item.amenities.trim() !== "")
+          .map((item) => ({
+            amenities: item.amenities,
+            amenity_types: Array.isArray(item.amenity_types)
+              ? item.amenity_types.filter(Boolean)
+              : [],
+          })),
+        nearby_places: formData.nearby_places
+          .filter((p) => p.name && p.name.trim() !== "")
+          .map((p) => ({
+            name: p.name.trim(),
+            type: p.type || "Landmark",
+            distance:
+              p.distance !== "" && !isNaN(Number(p.distance))
+                ? Number(p.distance)
+                : p.distance || "",
+            distance_unit: p.distance_unit || "km",
+          })),
+        image_url: formData.image_url,
+        map_url: formData.map_url || undefined,
+        media_url: formData.media_url || undefined,
+        pincode: formData.pincode || undefined,
+        owner_name: formData.owner_name || undefined,
+        developer_name: formData.developer_name || undefined,
+        project_name: formData.project_name || undefined,
+        status: "draft",
+        isFeatured: formData.isFeatured,
+        isVerified: formData.isVerified,
+      };
+
+      if (editingProperty?._id) {
+        await axiosInstance.put(
+          `/property/${editingProperty._id}`,
+          draftData
+        );
+        setOpen(false);
+        resetForm();
+        showMessage(
+          "success",
+          "Draft Updated",
+          "Property draft updated successfully."
+        );
+      } else {
+        await axiosInstance.post("/property", draftData);
+        setOpen(false);
+        resetForm();
+        showMessage(
+          "success",
+          "Draft Saved",
+          "Property saved as draft successfully."
+        );
+      }
+
+      await fetchProperties(isDraftView);
+      await fetchPropertyStats();
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Save Draft Failed",
+        getErrorMessage(
+          error,
+          "Something went wrong while saving the property draft."
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePublishDraft = async (property: Property) => {
+    const hasType =
+      property.type &&
+      (typeof property.type === "object" ? property.type._id : property.type);
+    const hasName =
+      property.name &&
+      property.name.trim() !== "" &&
+      property.name !== "Untitled Draft";
+
+    if (!hasType || !hasName) {
+      await handleEdit(property);
+      showMessage(
+        "error",
+        "Details Required",
+        "Please provide a property title and category type before publishing."
+      );
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await axiosInstance.put(`/property/${property._id}/publish`, {
+        status: "available",
+      });
+      showMessage(
+        "success",
+        "Property Published",
+        `"${property.name}" is now live and published successfully.`
+      );
+      await fetchProperties(isDraftView);
+      await fetchPropertyStats();
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Publish Failed",
+        getErrorMessage(error, "Failed to publish draft property.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteId) return;
+
+    try {
+      setLoading(true);
+      await axiosInstance.delete(`/property/${deleteId}`);
+      setDeleteId(null);
+      showMessage(
+        "success",
+        "Property Deleted",
+        "Property deleted successfully."
+      );
+      await fetchProperties();
+      await fetchPropertyStats();
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Delete Failed",
+        getErrorMessage(error, "Failed to delete property.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (property: Property) => {
+    try {
+      const nextStatus =
+        propertyStatusCycle[property.status || "available"];
+
+      await axiosInstance.put(`/property/${property._id}`, {
+        status: nextStatus,
+      });
+
+      showMessage(
+        "success",
+        "Status Updated",
+        `Property status changed to ${nextStatus.replace(/_/g, " ")}.`
+      );
+      await fetchProperties();
+      await fetchPropertyStats();
+    } catch (error: any) {
+      showMessage(
+        "error",
+        "Status Update Failed",
+        getErrorMessage(error, "Failed to update property status.")
+      );
+    }
+  };
+
+  const handleToggleFeatured = async (property: Property) => {
+    const nextVal = !property.isFeatured;
+    // Optimistic UI update
     setProperties((prev) =>
       prev.map((p) =>
-        p._id === id ? { ...p, status: newStatus } : p
+        p._id === property._id ? { ...p, isFeatured: nextVal } : p
       )
     );
 
-    // update backend
     try {
-      await axiosInstance.put(`/property/${id}`, { status: newStatus });
-      toast({ title: "Updated", description: `Status changed to ${newStatus}` });
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to update status",
-        variant: "destructive",
+      await axiosInstance.put(`/property/${property._id}`, {
+        isFeatured: nextVal,
       });
+      showMessage(
+        "success",
+        nextVal ? "Featured Added" : "Featured Removed",
+        `"${property.name}" is ${
+          nextVal ? "now featured on showcase" : "no longer featured"
+        }.`
+      );
+      await fetchPropertyStats();
+    } catch (error: any) {
+      // Revert optimistic update on failure
+      setProperties((prev) =>
+        prev.map((p) =>
+          p._id === property._id ? { ...p, isFeatured: !nextVal } : p
+        )
+      );
+      showMessage(
+        "error",
+        "Update Failed",
+        getErrorMessage(error, "Failed to update featured status.")
+      );
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "available":
-        return "bg-success text-success-foreground";
-      case "sold":
-        return "bg-secondary text-secondary-foreground";
-      case "under_construction":
-        return "bg-warning text-warning-foreground";
-      default:
-        return "bg-muted text-muted-foreground";
+  const handleToggleVerified = async (property: Property) => {
+    const nextVal = !property.isVerified;
+    // Optimistic UI update
+    setProperties((prev) =>
+      prev.map((p) =>
+        p._id === property._id ? { ...p, isVerified: nextVal } : p
+      )
+    );
+
+    try {
+      await axiosInstance.put(`/property/${property._id}`, {
+        isVerified: nextVal,
+      });
+      showMessage(
+        "success",
+        nextVal ? "Listing Verified" : "Verification Removed",
+        `"${property.name}" verification badge ${
+          nextVal ? "enabled" : "removed"
+        }.`
+      );
+      await fetchPropertyStats();
+    } catch (error: any) {
+      // Revert optimistic update on failure
+      setProperties((prev) =>
+        prev.map((p) =>
+          p._id === property._id ? { ...p, isVerified: !nextVal } : p
+        )
+      );
+      showMessage(
+        "error",
+        "Update Failed",
+        getErrorMessage(error, "Failed to update verification status.")
+      );
     }
   };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 0,
-    }).format(price);
+  // --- Filtering & Stats ---
+
+  const getPropertyTypeName = (type: any) => {
+    if (!type) return "Property";
+    if (typeof type === "object") return type.name || "Property";
+    const found = propertyTypes.find((item) => item._id === type);
+    return found?.name || "Property";
   };
 
-  const options = amenitiesList.map((a: any) => ({
-    value: a._id,
-    label: a.name,
-  }));
+  const filteredProperties = useMemo(() => {
+    return properties.filter((property) => {
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const typeName = getPropertyTypeName(property.type).toLowerCase();
+        const matchesName = (property.name || "").toLowerCase().includes(q);
+        const matchesCity = (property.location?.city || "")
+          .toLowerCase()
+          .includes(q);
+        const matchesArea = (property.location?.area || "")
+          .toLowerCase()
+          .includes(q);
+        const matchesProject = (property.project_name || "")
+          .toLowerCase()
+          .includes(q);
+        const matchesOwner = (property.owner_name || "")
+          .toLowerCase()
+          .includes(q);
+        const matchesType = typeName.includes(q);
+        const matchesConfig = property.bedrooms
+          ? `${property.bedrooms} bhk`.includes(q)
+          : false;
+
+        if (
+          !matchesName &&
+          !matchesCity &&
+          !matchesArea &&
+          !matchesProject &&
+          !matchesOwner &&
+          !matchesType &&
+          !matchesConfig
+        ) {
+          return false;
+        }
+      }
+
+      if (filterType !== "all") {
+        const typeId =
+          typeof property.type === "object"
+            ? property.type?._id
+            : property.type;
+        if (typeId !== filterType) return false;
+      }
+
+      if (filterListing !== "all") {
+        if ((property.listing_type || "sale") !== filterListing) return false;
+      }
+
+      if (filterStatus !== "all") {
+        if ((property.status || "available") !== filterStatus) return false;
+      }
+
+      if (filterHighlight === "featured" && !property.isFeatured) {
+        return false;
+      }
+
+      if (filterHighlight === "verified" && !property.isVerified) {
+        return false;
+      }
+
+      return true;
+    });
+  }, [
+    properties,
+    searchQuery,
+    filterType,
+    filterListing,
+    filterStatus,
+    filterHighlight,
+    propertyTypes,
+  ]);
+
+  const hasActiveFilters =
+    searchQuery.trim() !== "" ||
+    filterType !== "all" ||
+    filterListing !== "all" ||
+    filterStatus !== "all" ||
+    filterHighlight !== "all";
+
+  const clearFilters = () => {
+    setSearchQuery("");
+    setFilterType("all");
+    setFilterListing("all");
+    setFilterStatus("all");
+    setFilterHighlight("all");
+  };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-7">
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-card-header">Properties</h1>
-          <p className="text-muted-foreground">Manage your property portfolio</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-black tracking-tight text-slate-950">
+              {isDraftView ? "Draft Properties" : "Properties Portfolio"}
+            </h1>
+            {isDraftView && (
+              <span className="rounded-full bg-purple-900 text-white border border-purple-950 text-[11px] font-black px-3 py-0.5 shadow-xs uppercase tracking-wider">
+                Admin Drafts Only
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs font-semibold text-slate-600">
+            {isDraftView
+              ? "Review, edit, and publish saved property drafts before they go live."
+              : "Manage, publish, inspect, and verify real estate listings with rich multi-media showcase."}
+          </p>
         </div>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-primary hover:opacity-90 shadow-primary">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Property
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl bg-card max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-card-header">
-                {editingProperty ? "Edit Property" : "Add New Property"}
-              </DialogTitle>
-            </DialogHeader>
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <Button
+            onClick={() => {
+              resetForm();
+              setOpen(true);
+            }}
+            className="h-11 rounded-2xl bg-gradient-to-r from-primary to-rose-600 px-5 font-black text-white shadow-md shadow-primary/25 hover:opacity-95"
+          >
+            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Add Property
+          </Button>
 
-            {/* Form */}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>Name</Label>
-                <Input
-                  value={formData.name}
-                  onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Type</Label>
-                <select
-                  value={formData.type}
-                  onChange={(e) => setFormData((p) => ({ ...p, type: e.target.value }))}
-                  required
-                  className="border rounded px-2 py-2 w-full"
-                >
-                  <option value="">Select Property Type</option>
-                  {propertyTypes.map((type: any) => (
-                    <option key={type._id} value={type._id}>
-                      {type.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Description</Label>
-                <Textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData((p) => ({ ...p, description: e.target.value }))}
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Area Size (sq.ft)</Label>
-                  <Input
-                    placeholder="Area Size (sq.ft)"
-                    type="number"
-                    value={formData.area_size}
-                    onChange={(e) => setFormData((p) => ({ ...p, area_size: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Price</Label>
-                  <Input
-                    placeholder="Price"
-                    type="number"
-                    value={formData.price}
-                    onChange={(e) => setFormData((p) => ({ ...p, price: e.target.value }))}
-                    required
-                  />
-                </div>
-
-
-              </div>
-              {/* Location Section */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Address</Label>
-                  <Input
-                    value={formData.location.address}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        location: { ...p.location, address: e.target.value },
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>City</Label>
-                  <Input
-                    value={formData.location.city}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        location: { ...p.location, city: e.target.value },
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>State</Label>
-                  <Input
-                    value={formData.location.state}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        location: { ...p.location, state: e.target.value },
-                      }))
-                    }
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Country</Label>
-                  <Input
-                    value={formData.location.country}
-                    onChange={(e) =>
-                      setFormData((p) => ({
-                        ...p,
-                        location: { ...p.location, country: e.target.value },
-                      }))
-                    }
-                    required
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Pincode</Label>
-                <Input
-                  value={formData.pincode}
-                  onChange={(e) => setFormData((p) => ({ ...p, pincode: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Map URL</Label>
-                <Input
-                  value={formData.mape_url}
-                  onChange={(e) => setFormData((p) => ({ ...p, mape_url: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Media URL</Label>
-                <Input
-                  value={formData.media_url}
-                  onChange={(e) => setFormData((p) => ({ ...p, media_url: e.target.value }))}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium">Amenities</label>
-                <Select
-                  isMulti
-                  options={options}
-                  value={options.filter((opt) => formData.amenities.includes(opt.value))}
-                  onChange={(selected: any) =>
-                    setFormData((prev: any) => ({
-                      ...prev,
-                      amenities: selected.map((opt: any) => opt.value),
-                    }))
-                  }
-                  className="w-full"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Images</Label>
-                <Input
-                  type="file"
-                  multiple
-                  onChange={async (e) => {
-                    const files = e.target.files;
-                    if (!files) return;
-
-                    const previews: string[] = [];
-
-                    // Add local previews first
-                    for (let i = 0; i < files.length; i++) {
-                      const file = files[i];
-                      const localUrl = URL.createObjectURL(file);
-                      previews.push(localUrl);
-
-                      // Update state immediately for preview
-                      setFormData((prev: any) => ({
-                        ...prev,
-                        image_url: [...(prev.image_url || []), localUrl],
-                      }));
-
-                      // Upload to server
-                      const formDataUpload = new FormData();
-                      formDataUpload.append("files", file);
-
-                      try {
-                        const res = await axios.post(
-                          "https://uploads.ftdigitalsolutions.org/files/upload",
-                          formDataUpload,
-                          {
-                            headers: { "Content-Type": "multipart/form-data" },
-                          }
-                        );
-
-                        const uploadedUrl = res.data.result[0].upload_url;
-
-                        // Replace local preview with uploaded URL
-                        setFormData((prev: any) => ({
-                          ...prev,
-                          image_url: prev.image_url.map((img: string) =>
-                            img === localUrl ? uploadedUrl : img
-                          ),
-                        }));
-                      } catch (err) {
-                        toast({
-                          title: "Error",
-                          description: `Failed to upload ${file.name}`,
-                          variant: "destructive",
-                        });
-                      }
-                    }
-                  }}
-                />
-
-                {/* Preview images */}
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {Array.isArray(formData.image_url) &&
-                    formData.image_url.map((url: string, idx: number) => (
-                      <div key={idx} className="relative">
-                        <img
-                          src={url}
-                          alt={`uploaded-${idx}`}
-                          className="w-20 h-20 object-cover rounded border"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData((prev: any) => ({
-                              ...prev,
-                              image_url: prev.image_url.filter((_: string, i: number) => i !== idx),
-                            }));
-                          }}
-                          className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-red-700"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                </div>
-              </div>
-
-
-              <div className="space-y-2">
-                <Label>Status</Label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData((p) => ({ ...p, status: e.target.value }))}
-                  className="border rounded px-2 py-1 w-full"
-                >
-                  <option value="available">Available</option>
-                  <option value="sold">Sold</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-              <div className="space-y-2">
-                <Label>Owner</Label>
-                <Input
-                  value={formData.owner_name}
-                  onChange={(e) => setFormData((p) => ({ ...p, owner_name: e.target.value }))}
-                />
-              </div>
-
-              <div className="flex gap-2 pt-4">
-                <Button type="submit" className="flex-1 bg-gradient-primary hover:opacity-90">
-                  {editingProperty ? "Update" : "Create"}
-                </Button>
-                <Button type="button" variant="outline" className="flex-1" onClick={() => setIsDialogOpen(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+          <Button
+            variant={isDraftView ? "default" : "outline"}
+            onClick={() => {
+              setIsDraftView(!isDraftView);
+              clearFilters();
+            }}
+            className={`h-11 rounded-2xl px-4 font-black transition flex items-center gap-2 ${
+              isDraftView
+                ? "bg-purple-900 text-white hover:bg-purple-950 shadow-md shadow-purple-900/30 border border-purple-950"
+                : "border-2 border-purple-800 text-purple-900 hover:bg-purple-100/70 hover:text-purple-950 bg-purple-50 shadow-xs"
+            }`}
+            title={isDraftView ? "Return to active portfolio" : "View unpublished draft properties"}
+          >
+            <FileText className={`h-4 w-4 stroke-[2.5] ${isDraftView ? "text-amber-300" : "text-purple-800"}`} />
+            <span>
+              {isDraftView
+                ? "Live Portfolio"
+                : `Drafts${stats.draft ? ` (${stats.draft})` : ""}`}
+            </span>
+          </Button>
+        </div>
       </div>
 
-      {/* Table */}
-      <Card className="shadow-card">
-        <CardHeader>
-          <CardTitle className="text-xl text-card-header">All Properties</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Price & Area</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {properties.map((property) => (
-                <TableRow key={property.id}>
-                  <TableCell>{property.name}</TableCell>
-                  <TableCell>{property.type?.name}</TableCell>
-                  <TableCell>
-                    {property.location?.city}, {property.location?.state}
-                  </TableCell>
-                  <TableCell>
-                    {formatPrice(property.price)} <br /> {property.area_size} sq.ft
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      onClick={() => handleStatusClick(property._id, property.status)}
-                      className={`${getStatusColor(property.status)} capitalize cursor-pointer`}
-                    >
-                      {property.status.replace("_", " ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(property)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive"
-                        onClick={() => handleDelete(property._id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-    </div >
+      {/* Admin Draft Mode Banner */}
+      {isDraftView && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border-2 border-purple-300 bg-gradient-to-r from-purple-100 via-purple-50 to-indigo-50 px-5 py-3.5 text-xs shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-800 text-white font-black text-xs shrink-0 shadow-sm">
+              <FileText className="h-5 w-5 text-amber-300" />
+            </div>
+            <div>
+              <p className="font-black text-purple-950 text-sm">
+                Admin Drafts Archive ({properties.length} {properties.length === 1 ? "draft listing" : "draft listings"})
+              </p>
+              <p className="text-xs text-purple-900 font-semibold mt-0.5">
+                Drafts are confidential for internal editing and are completely hidden from the public website until published.
+              </p>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setIsDraftView(false)}
+            className="h-8.5 rounded-xl text-xs font-black border-2 border-purple-800 text-purple-900 bg-white hover:bg-purple-100 shadow-xs shrink-0"
+          >
+            Back to Live Properties
+          </Button>
+        </div>
+      )}
+
+      {/* KPI Metric Cards */}
+      <PropertyStatsCards
+        stats={stats}
+        activeStatusFilter={filterStatus}
+        activeHighlightFilter={filterHighlight}
+        onFilterStatus={(s) => setFilterStatus(filterStatus === s ? "all" : s)}
+        onFilterHighlight={(h) =>
+          setFilterHighlight(filterHighlight === h ? "all" : h)
+        }
+        onResetFilters={clearFilters}
+      />
+
+      {/* Filter & Search Control Panel */}
+      <PropertyFilters
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        filterType={filterType}
+        setFilterType={setFilterType}
+        filterListing={filterListing}
+        setFilterListing={setFilterListing}
+        filterStatus={filterStatus}
+        setFilterStatus={setFilterStatus}
+        filterHighlight={filterHighlight}
+        setFilterHighlight={setFilterHighlight}
+        viewMode={viewMode}
+        setViewMode={setViewMode}
+        propertyTypes={propertyTypes}
+        filteredCount={filteredProperties.length}
+        totalCount={properties.length}
+        hasActiveFilters={hasActiveFilters}
+        clearFilters={clearFilters}
+      />
+
+      {/* Properties Display (Grid or Table) */}
+      {loading && properties.length === 0 ? (
+        <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-card p-12 text-center shadow-xs">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm font-bold text-slate-800">Loading properties...</p>
+        </div>
+      ) : filteredProperties.length === 0 ? (
+        <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-card p-12 text-center shadow-xs">
+          <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+            <Building2 className="h-7 w-7" />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-slate-950">
+              {isDraftView
+                ? "No draft properties found"
+                : "No properties match your query"}
+            </h3>
+            <p className="mt-1 text-xs font-semibold text-slate-600">
+              {isDraftView
+                ? "You don't have any saved drafts. Create a property and click 'Save as Draft' to store it here."
+                : hasActiveFilters
+                ? "Try adjusting your search criteria or clearing filters."
+                : "Get started by publishing your first property listing."}
+            </p>
+          </div>
+          {hasActiveFilters ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={clearFilters}
+              className="mt-2 rounded-xl font-bold border-slate-300 text-slate-800"
+            >
+              Clear Filters
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              onClick={() => {
+                resetForm();
+                setOpen(true);
+              }}
+              className="mt-2 rounded-xl font-bold bg-primary text-primary-foreground"
+            >
+              <Plus className="mr-1.5 h-4 w-4 stroke-[2.5]" />
+              Add Property
+            </Button>
+          )}
+        </div>
+      ) : viewMode === "grid" ? (
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredProperties.map((property) => (
+            <PropertyCard
+              key={property._id}
+              property={property}
+              onQuickView={(p) => {
+                setQuickViewProperty(p);
+                setQuickViewActiveImage(0);
+              }}
+              onEdit={handleEdit}
+              onDelete={setDeleteId}
+              onStatusChange={handleStatusChange}
+              onToggleFeatured={handleToggleFeatured}
+              onToggleVerified={handleToggleVerified}
+              onPublish={handlePublishDraft}
+              getPropertyTypeName={getPropertyTypeName}
+            />
+          ))}
+        </div>
+      ) : (
+        <PropertyTable
+          properties={filteredProperties}
+          onQuickView={(p) => {
+            setQuickViewProperty(p);
+            setQuickViewActiveImage(0);
+          }}
+          onEdit={handleEdit}
+          onDelete={setDeleteId}
+          onStatusChange={handleStatusChange}
+          onToggleFeatured={handleToggleFeatured}
+          onToggleVerified={handleToggleVerified}
+          onPublish={handlePublishDraft}
+          getPropertyTypeName={getPropertyTypeName}
+        />
+      )}
+
+      {/* Property Form Dialog */}
+      <PropertyFormDialog
+        open={open}
+        onOpenChange={(val) => {
+          setOpen(val);
+          if (!val) resetForm();
+        }}
+        editingProperty={editingProperty}
+        formData={formData}
+        formActiveTab={formActiveTab}
+        setFormActiveTab={setFormActiveTab}
+        handleSubmit={handleSubmit}
+        handleSaveDraft={handleSaveDraft}
+        handleInputChange={handleInputChange}
+        handleLocationChange={handleLocationChange}
+        handlePropertyTypeChange={handlePropertyTypeChange}
+        propertyTypes={propertyTypes}
+        propertyTypeFields={propertyTypeFields}
+        handleImageUpload={handleImageUpload}
+        removeImage={removeImage}
+        imageUploading={imageUploading}
+        loading={loading}
+        resetForm={resetForm}
+        amenities={amenities}
+        amenityTypes={amenityTypes}
+        selectedAmenity={selectedAmenity}
+        selectedAmenityTypes={selectedAmenityTypes}
+        setSelectedAmenityTypes={setSelectedAmenityTypes}
+        amenityDropdownOpen={amenityDropdownOpen}
+        setAmenityDropdownOpen={setAmenityDropdownOpen}
+        handleAmenitySelect={handleAmenitySelect}
+        toggleAmenityType={toggleAmenityType}
+        addAmenity={addAmenity}
+        editingAmenityIndex={editingAmenityIndex}
+        getAmenityTypeName={getAmenityTypeName}
+        getAmenityName={getAmenityName}
+        removeAmenityType={removeAmenityType}
+        viewAmenity={viewAmenity}
+        editAmenity={editAmenity}
+        removeAmenity={removeAmenity}
+        addNearbyPlace={addNearbyPlace}
+        updateNearbyPlace={updateNearbyPlace}
+        removeNearbyPlace={removeNearbyPlace}
+      />
+
+      {/* Property Quick View Modal */}
+      <PropertyQuickViewDialog
+        property={quickViewProperty}
+        activeImage={quickViewActiveImage}
+        setActiveImage={setQuickViewActiveImage}
+        onClose={() => setQuickViewProperty(null)}
+        onEdit={handleEdit}
+        getPropertyTypeName={getPropertyTypeName}
+        getAmenityName={getAmenityName}
+      />
+
+      {/* Amenities Details Modal */}
+      <AmenityDetailsDialog
+        open={amenityDetailsOpen}
+        onOpenChange={setAmenityDetailsOpen}
+        viewingAmenity={viewingAmenity}
+        getAmenityName={getAmenityName}
+        getAmenityTypeName={getAmenityTypeName}
+      />
+
+      {/* Delete Confirmation Modal */}
+      <PropertyDeleteDialog
+        open={Boolean(deleteId)}
+        onOpenChange={(val) => !val && setDeleteId(null)}
+        onConfirm={confirmDelete}
+        loading={loading}
+      />
+
+      {/* Notification Message Modal */}
+      <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
+        <DialogContent className="w-[92vw] max-w-sm rounded-3xl p-6 border border-slate-200">
+          <div className="flex flex-col items-center text-center">
+            <div
+              className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${
+                messageType === "success"
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : "bg-rose-500/10 text-rose-600"
+              }`}
+            >
+              {messageType === "success" ? (
+                <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+              ) : (
+                <AlertCircle className="h-7 w-7 stroke-[2.5]" />
+              )}
+            </div>
+
+            <DialogTitle className="text-lg font-black text-slate-950">{messageTitle}</DialogTitle>
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700">{messageText}</p>
+
+            <Button
+              className="mt-6 w-full rounded-2xl font-black bg-primary text-white shadow-md shadow-primary/25"
+              onClick={() => setMessageOpen(false)}
+            >
+              Okay
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 };
 
