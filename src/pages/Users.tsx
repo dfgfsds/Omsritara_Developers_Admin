@@ -1,285 +1,955 @@
-"use client";
-
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import axiosInstance from "@/lib/axiosInstance";
-import {
-    Card,
-    CardContent,
-    CardHeader,
-    CardTitle,
-} from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
-import { Eye, Edit, Trash2, Search, Phone, Mail, Plus } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 
 interface User {
-    _id: string;
-    name: string;
-    email: string;
-    mobile: string;
-    password?: string;
-    createdAt: string;
+  _id: string;
+  name: string;
+  email: string;
+  mobile: string;
+  status: "active" | "inactive";
+  createdAt: string;
+  role?: {
+    _id?: string;
+    name?: string;
+  } | string;
 }
 
-export default function Users() {
-    const [users, setUsers] = useState<User[]>([]);
-    const [searchTerm, setSearchTerm] = useState("");
-    const [selectedUser, setSelectedUser] = useState<User | null>(null);
-    const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
-    const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-    const [newUser, setNewUser] = useState({
+interface Role {
+  _id: string;
+  name: string;
+}
+
+interface EditUser {
+  name: string;
+  email: string;
+  mobile: string;
+  status: "active" | "inactive";
+}
+
+const Users = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
+  const [userRoleId, setUserRoleId] = useState("");
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
+  const [isViewDialogOpen, setIsViewDialogOpen] = useState(false);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+
+  const [newUser, setNewUser] = useState({
+    name: "",
+    email: "",
+    mobile: "",
+    password: "",
+  });
+
+  const [editUser, setEditUser] = useState<EditUser>({
+    name: "",
+    email: "",
+    mobile: "",
+    status: "active",
+  });
+
+  useEffect(() => {
+    fetchUsers();
+    fetchRoles();
+  }, []);
+
+  const getErrorMessage = (
+    error: any,
+    defaultMessage: string
+  ): string => {
+    const data = error?.response?.data;
+
+    if (typeof data?.msg === "string" && data.msg.trim()) {
+      return data.msg;
+    }
+
+    if (typeof data?.message === "string" && data.message.trim()) {
+      return data.message;
+    }
+
+    if (typeof data?.error === "string" && data.error.trim()) {
+      return data.error;
+    }
+
+    if (Array.isArray(data?.error)) {
+      return data.error
+        .map((item: any) => {
+          if (typeof item === "string") return item;
+          if (typeof item?.message === "string") return item.message;
+          return "";
+        })
+        .filter(Boolean)
+        .join(", ");
+    }
+
+    return defaultMessage;
+  };
+
+  const fetchUsers = async () => {
+    try {
+      const response = await axiosInstance.get("/user");
+
+      const result = response?.data?.result;
+
+      if (Array.isArray(result)) {
+        setUsers(result);
+      } else if (Array.isArray(response?.data)) {
+        setUsers(response.data);
+      } else {
+        setUsers([]);
+      }
+    } catch (error: any) {
+      console.error("FETCH USERS ERROR:", error);
+
+      toast({
+        title: "Error",
+        description: getErrorMessage(
+          error,
+          "Unable to fetch users."
+        ),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const fetchRoles = async () => {
+    try {
+      const response = await axiosInstance.get("/role");
+
+      const result =
+        response?.data?.result ||
+        response?.data?.data ||
+        response?.data;
+
+      let roleList: Role[] = [];
+
+      if (Array.isArray(result)) {
+        roleList = result;
+      } else if (Array.isArray(result?.data)) {
+        roleList = result.data;
+      }
+
+      const validRoles = roleList.filter(
+        (role) => role?._id
+      );
+
+      setRoles(validRoles);
+
+      const normalUserRole = validRoles.find((role) => {
+        const roleName = String(role.name || "")
+          .trim()
+          .toLowerCase();
+
+        return (
+          roleName === "user" ||
+          roleName === "users" ||
+          roleName === "normal user" ||
+          roleName === "customer"
+        );
+      });
+
+      if (normalUserRole?._id) {
+        setUserRoleId(normalUserRole._id);
+      } else if (validRoles.length > 0) {
+        const nonAdminRole = validRoles.find((role) => {
+          const roleName = String(role.name || "")
+            .trim()
+            .toLowerCase();
+
+          return (
+            roleName !== "admin" &&
+            roleName !== "administrator"
+          );
+        });
+
+        setUserRoleId(
+          nonAdminRole?._id || validRoles[0]._id
+        );
+      }
+    } catch (error: any) {
+      console.error("FETCH ROLES ERROR:", error);
+
+      toast({
+        title: "Role Loading Failed",
+        description: getErrorMessage(
+          error,
+          "Unable to load user roles."
+        ),
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleAddUser = async () => {
+    const name = newUser.name.trim();
+    const email = newUser.email.trim();
+    const mobile = newUser.mobile.trim();
+    const password = newUser.password.trim();
+
+    if (!name || !email || !mobile || !password) {
+      toast({
+        title: "Validation Error",
+        description: "Please fill all required fields.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/^[0-9]{10}$/.test(mobile)) {
+      toast({
+        title: "Invalid Mobile",
+        description:
+          "Mobile number must contain exactly 10 digits.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({
+        title: "Invalid Email",
+        description:
+          "Please enter a valid email address.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!userRoleId) {
+      toast({
+        title: "Role Error",
+        description:
+          "User role is not available. Please refresh the page and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsAdding(true);
+
+      const payload = {
+        name,
+        email,
+        mobile,
+        password,
+        role: userRoleId,
+      };
+
+      const response = await axiosInstance.post(
+        "/signup",
+        payload
+      );
+
+      console.log("ADD USER RESPONSE:", response.data);
+
+      toast({
+        title: "Success",
+        description: "User created successfully.",
+      });
+
+      setNewUser({
         name: "",
         email: "",
         mobile: "",
         password: "",
+      });
+
+      setIsAddDialogOpen(false);
+
+      await fetchUsers();
+    } catch (error: any) {
+      console.error("ADD USER ERROR:", error);
+      console.error(
+        "STATUS:",
+        error?.response?.status
+      );
+      console.error(
+        "RESPONSE:",
+        error?.response?.data
+      );
+
+      toast({
+        title: "Add User Failed",
+        description: getErrorMessage(
+          error,
+          "Unable to create user."
+        ),
+        variant: "destructive",
+      });
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
+  const openEditDialog = (user: User) => {
+    setSelectedUser(user);
+
+    setEditUser({
+      name: user.name || "",
+      email: user.email || "",
+      mobile: user.mobile || "",
+      status: user.status || "active",
     });
 
-    // Fetch users
-    const fetchUsers = async () => {
-        try {
-            const res = await axiosInstance.get("/user");
-            if (res.data?.result) {
-                setUsers(res.data.result);
-            }
-        } catch (error) {
-            console.error("Error fetching users:", error);
-        }
-    };
+    setIsEditDialogOpen(true);
+  };
 
-    useEffect(() => {
-        fetchUsers();
-    }, []);
+  const handleUpdateUser = async () => {
+    if (!selectedUser) return;
 
-    // Add User
-    const handleAddUser = async () => {
-        try {
-            const res = await axiosInstance.post("/signup", newUser);
-            toast({
-                title: "User added successfully!",
-                description: res?.data.msg || "Something went wrong!",
+    const name = editUser.name.trim();
+    const email = editUser.email.trim();
+    const mobile = editUser.mobile.trim();
+    const status = editUser.status;
 
-            });
-            fetchUsers();
+    if (!name) {
+      toast({
+        title: "Validation Error",
+        description: "Name is required.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-            setIsAddDialogOpen(false);
-            setNewUser({ name: "", email: "", mobile: "", password: "" });
-        } catch (error: any) {
-            console.error("Error adding user:", error);
-            toast({
-                title: "Login Failed",
-                description: error?.response?.data.msg || "Something went wrong!",
-                variant: "destructive",
-            });
-        }
-    };
+    if (!mobile) {
+      toast({
+        title: "Validation Error",
+        description: "Mobile is required.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Delete user
-    const handleDelete = async (id: string) => {
-        try {
-            await axiosInstance.delete(`/user/${id}`);
-            fetchUsers();
-        } catch (error) {
-            console.error("Error deleting user:", error);
-        }
-    };
+    if (!/^[0-9]{10}$/.test(mobile)) {
+      toast({
+        title: "Invalid Mobile",
+        description:
+          "Mobile number must contain exactly 10 digits.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    const filteredUsers = users.filter((user) =>
-        [user.name, user.email, user.mobile]
-            .join(" ")
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())
+    /*
+      Important fix:
+
+      Existing database user email invalid-a irundhaalum,
+      status mattum change panna email backend-ku send panna maatom.
+
+      Same value irundha field payload-la pogadhu.
+      Change pannina mattum validate + send pannuvom.
+    */
+
+    const updatePayload: Record<string, string> = {};
+
+    if (name !== (selectedUser.name || "").trim()) {
+      updatePayload.name = name;
+    }
+
+    if (email !== (selectedUser.email || "").trim()) {
+      if (!email) {
+        toast({
+          title: "Invalid Email",
+          description: "Email cannot be empty.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        toast({
+          title: "Invalid Email",
+          description:
+            "Please enter a valid email address.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      updatePayload.email = email;
+    }
+
+    if (mobile !== (selectedUser.mobile || "").trim()) {
+      updatePayload.mobile = mobile;
+    }
+
+    if (status !== selectedUser.status) {
+      updatePayload.status = status;
+    }
+
+    if (Object.keys(updatePayload).length === 0) {
+      toast({
+        title: "No Changes",
+        description:
+          "Please change at least one user detail.",
+      });
+      return;
+    }
+
+    try {
+      setIsUpdating(true);
+
+      console.log("=================================");
+      console.log(
+        "UPDATE USER ID:",
+        selectedUser._id
+      );
+      console.log(
+        "UPDATE USER PAYLOAD:",
+        updatePayload
+      );
+
+      const response = await axiosInstance.put(
+        `/user/${selectedUser._id}`,
+        updatePayload
+      );
+
+      console.log(
+        "UPDATE USER RESPONSE:",
+        response.data
+      );
+      console.log("=================================");
+
+      toast({
+        title: "Success",
+        description:
+          "User updated successfully.",
+      });
+
+      setIsEditDialogOpen(false);
+      setSelectedUser(null);
+
+      await fetchUsers();
+    } catch (error: any) {
+      console.error("=================================");
+      console.error(
+        "UPDATE USER ERROR:",
+        error
+      );
+      console.error(
+        "STATUS:",
+        error?.response?.status
+      );
+      console.error(
+        "RESPONSE:",
+        error?.response?.data
+      );
+      console.error(
+        "REQUEST URL:",
+        error?.config?.url
+      );
+      console.error(
+        "REQUEST DATA:",
+        error?.config?.data
+      );
+      console.error("=================================");
+
+      toast({
+        title: "Update Failed",
+        description: getErrorMessage(
+          error,
+          "Unable to update user."
+        ),
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
+  const handleDeleteUser = async (user: User) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ${user.name}?`
     );
 
-    const formatDate = (dateString: string) => {
-        return new Date(dateString).toLocaleDateString("en-US", {
-            month: "short",
-            day: "numeric",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-        });
-    };
+    if (!confirmed) return;
 
-    const handleViewUser = (user: User) => {
-        setSelectedUser(user);
-        setIsViewDialogOpen(true);
-    };
+    try {
+      setIsDeleting(true);
+
+      const response =
+        await axiosInstance.delete(
+          `/user/${user._id}`
+        );
+
+      console.log(
+        "DELETE USER RESPONSE:",
+        response.data
+      );
+
+      toast({
+        title: "Success",
+        description:
+          "User deleted successfully.",
+      });
+
+      await fetchUsers();
+    } catch (error: any) {
+      console.error(
+        "DELETE USER ERROR:",
+        error
+      );
+
+      toast({
+        title: "Delete Failed",
+        description: getErrorMessage(
+          error,
+          "Unable to delete user."
+        ),
+        variant: "destructive",
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const openViewDialog = (user: User) => {
+    setSelectedUser(user);
+    setIsViewDialogOpen(true);
+  };
+
+  const filteredUsers = users.filter((user) => {
+    const search =
+      searchTerm.trim().toLowerCase();
 
     return (
-        <div className="space-y-6">
-            {/* Header + Search */}
-            <div className="flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-3xl font-bold">Users</h1>
-                        <p className="text-muted-foreground">
-                            Manage all registered users in the system
-                        </p>
-                    </div>
-                    <Button onClick={() => setIsAddDialogOpen(true)}>
-                        <Plus className="h-4 w-4 mr-2" /> Add User
-                    </Button>
-                </div>
+      user.name
+        ?.toLowerCase()
+        .includes(search) ||
+      user.email
+        ?.toLowerCase()
+        .includes(search) ||
+      user.mobile?.includes(search)
+    );
+  });
 
-                <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-                        <Input
-                            placeholder="Search users..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
-                </div>
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">
+            Users
+          </h1>
+
+          <p className="text-muted-foreground">
+            Manage users and their details
+          </p>
+        </div>
+
+        <button
+          onClick={() => {
+            setNewUser({
+              name: "",
+              email: "",
+              mobile: "",
+              password: "",
+            });
+
+            setIsAddDialogOpen(true);
+          }}
+          className="px-4 py-2 rounded-md bg-primary text-primary-foreground"
+        >
+          + Add User
+        </button>
+      </div>
+
+      <div>
+        <input
+          type="text"
+          placeholder="Search users..."
+          value={searchTerm}
+          onChange={(e) =>
+            setSearchTerm(e.target.value)
+          }
+          className="w-full max-w-md px-4 py-2 border rounded-md"
+        />
+      </div>
+
+      <div className="border rounded-lg overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-muted">
+              <tr>
+                <th className="text-left p-4">
+                  Name
+                </th>
+
+                <th className="text-left p-4">
+                  Email
+                </th>
+
+                <th className="text-left p-4">
+                  Mobile
+                </th>
+
+                <th className="text-left p-4">
+                  Status
+                </th>
+
+                <th className="text-left p-4">
+                  Created
+                </th>
+
+                <th className="text-right p-4">
+                  Actions
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filteredUsers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="p-8 text-center text-muted-foreground"
+                  >
+                    No users found.
+                  </td>
+                </tr>
+              ) : (
+                filteredUsers.map((user) => (
+                  <tr
+                    key={user._id}
+                    className="border-t"
+                  >
+                    <td className="p-4">
+                      {user.name || "-"}
+                    </td>
+
+                    <td className="p-4">
+                      {user.email || "-"}
+                    </td>
+
+                    <td className="p-4">
+                      {user.mobile || "-"}
+                    </td>
+
+                    <td className="p-4">
+                      <span
+                        className={`px-2 py-1 rounded-full text-xs ${
+                          user.status === "active"
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {user.status}
+                      </span>
+                    </td>
+
+                    <td className="p-4">
+                      {user.createdAt
+                        ? new Date(
+                            user.createdAt
+                          ).toLocaleDateString()
+                        : "-"}
+                    </td>
+
+                    <td className="p-4">
+                      <div className="flex justify-end gap-2">
+                        <button
+                          onClick={() =>
+                            openViewDialog(user)
+                          }
+                          className="px-3 py-1 border rounded-md"
+                        >
+                          View
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            openEditDialog(user)
+                          }
+                          className="px-3 py-1 border rounded-md"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() =>
+                            handleDeleteUser(user)
+                          }
+                          disabled={isDeleting}
+                          className="px-3 py-1 border rounded-md text-red-600"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isAddDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg p-6 w-full max-w-md space-y-4">
+            <h2 className="text-xl font-semibold">
+              Add User
+            </h2>
+
+            <input
+              type="text"
+              placeholder="Name"
+              value={newUser.name}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  name: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={newUser.email}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  email: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <input
+              type="text"
+              placeholder="Mobile"
+              maxLength={10}
+              value={newUser.mobile}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  mobile: e.target.value.replace(
+                    /\D/g,
+                    ""
+                  ),
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <input
+              type="password"
+              placeholder="Password"
+              value={newUser.password}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  password: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <div className="text-sm text-muted-foreground">
+              {userRoleId
+                ? `Role: ${
+                    roles.find(
+                      (role) =>
+                        role._id === userRoleId
+                    )?.name || "User"
+                  }`
+                : "Loading user role..."}
             </div>
 
-            {/* Users Table */}
-            <Card className="shadow-card">
-                <CardHeader>
-                    <div className="flex items-center justify-between">
-                        <CardTitle className="text-xl">All Users</CardTitle>
-                        <Badge variant="outline" className="bg-muted/50">
-                            {filteredUsers.length} Total
-                        </Badge>
-                    </div>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>User Details</TableHead>
-                                <TableHead>Contact</TableHead>
-                                <TableHead>Created At</TableHead>
-                                <TableHead className="w-[120px]">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {filteredUsers.map((user) => (
-                                <TableRow key={user._id}>
-                                    <TableCell>
-                                        <div className="font-medium">{user.name}</div>
-                                    </TableCell>
-                                    <TableCell>
-                                        <div className="space-y-1">
-                                            <div className="text-sm text-muted-foreground flex items-center gap-1">
-                                                <Mail className="h-3 w-3" />
-                                                {user.email}
-                                            </div>
-                                            <div className="text-sm text-muted-foreground flex items-center gap-1">
-                                                <Phone className="h-3 w-3" />
-                                                {user.mobile}
-                                            </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-sm text-muted-foreground">
-                                        {formatDate(user.createdAt)}
-                                    </TableCell>
-                                    <TableCell className="flex gap-2">
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleViewUser(user)}
-                                        >
-                                            <Eye className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon">
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            variant="ghost"
-                                            size="icon"
-                                            onClick={() => handleDelete(user._id)}
-                                        >
-                                            <Trash2 className="h-4 w-4 text-red-600" />
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() =>
+                  setIsAddDialogOpen(false)
+                }
+                className="px-4 py-2 border rounded-md"
+              >
+                Cancel
+              </button>
 
-            {/* View User Dialog */}
-            <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-                <DialogContent className="sm:max-w-2xl bg-card">
-                    <DialogHeader>
-                        <DialogTitle>User Details</DialogTitle>
-                    </DialogHeader>
-                    {selectedUser && (
-                        <div className="space-y-4">
-                            <p>
-                                <strong>Name:</strong> {selectedUser.name}
-                            </p>
-                            <p>
-                                <strong>Email:</strong> {selectedUser.email}
-                            </p>
-                            <p>
-                                <strong>Mobile:</strong> {selectedUser.mobile}
-                            </p>
-                            <p>
-                                <strong>Created At:</strong> {formatDate(selectedUser.createdAt)}
-                            </p>
-                        </div>
-                    )}
-                </DialogContent>
-            </Dialog>
-
-            {/* Add User Dialog */}
-            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                <DialogContent className="sm:max-w-lg bg-card">
-                    <DialogHeader>
-                        <DialogTitle>Add New User</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                        <Input
-                            placeholder="Name"
-                            value={newUser.name}
-                            onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                        />
-                        <Input
-                            placeholder="Email"
-                            value={newUser.email}
-                            onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                        />
-                        <Input
-                            placeholder="Mobile"
-                            value={newUser.mobile}
-                            onChange={(e) => setNewUser({ ...newUser, mobile: e.target.value })}
-                        />
-                        <Input
-                            type="password"
-                            placeholder="Password"
-                            value={newUser.password}
-                            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                        />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button onClick={handleAddUser}>Save</Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+              <button
+                onClick={handleAddUser}
+                disabled={
+                  isAdding || !userRoleId
+                }
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+              >
+                {isAdding
+                  ? "Creating..."
+                  : "Create User"}
+              </button>
+            </div>
+          </div>
         </div>
-    );
-}
+      )}
+
+      {isEditDialogOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg p-6 w-full max-w-lg space-y-4">
+            <h2 className="text-xl font-semibold">
+              Edit User
+            </h2>
+
+            <input
+              type="text"
+              placeholder="Name"
+              value={editUser.name}
+              onChange={(e) =>
+                setEditUser({
+                  ...editUser,
+                  name: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <input
+              type="email"
+              placeholder="Email"
+              value={editUser.email}
+              onChange={(e) =>
+                setEditUser({
+                  ...editUser,
+                  email: e.target.value,
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <input
+              type="text"
+              placeholder="Mobile"
+              maxLength={10}
+              value={editUser.mobile}
+              onChange={(e) =>
+                setEditUser({
+                  ...editUser,
+                  mobile: e.target.value.replace(
+                    /\D/g,
+                    ""
+                  ),
+                })
+              }
+              className="w-full px-3 py-2 border rounded-md"
+            />
+
+            <div className="space-y-1">
+              <label className="text-sm font-medium">
+                Status
+              </label>
+
+              <select
+                value={editUser.status}
+                onChange={(e) =>
+                  setEditUser({
+                    ...editUser,
+                    status:
+                      e.target.value as
+                        | "active"
+                        | "inactive",
+                  })
+                }
+                className="w-full px-3 py-2 border rounded-md bg-background"
+              >
+                <option value="active">
+                  Active
+                </option>
+
+                <option value="inactive">
+                  Inactive
+                </option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => {
+                  setIsEditDialogOpen(false);
+                  setSelectedUser(null);
+                }}
+                className="px-4 py-2 border rounded-md"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={handleUpdateUser}
+                disabled={isUpdating}
+                className="px-4 py-2 rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+              >
+                {isUpdating
+                  ? "Updating..."
+                  : "Update User"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isViewDialogOpen && selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-background rounded-lg p-6 w-full max-w-md space-y-4">
+            <h2 className="text-xl font-semibold">
+              User Details
+            </h2>
+
+            <div className="space-y-2">
+              <p>
+                <strong>Name:</strong>{" "}
+                {selectedUser.name || "-"}
+              </p>
+
+              <p>
+                <strong>Email:</strong>{" "}
+                {selectedUser.email || "-"}
+              </p>
+
+              <p>
+                <strong>Mobile:</strong>{" "}
+                {selectedUser.mobile || "-"}
+              </p>
+
+              <p>
+                <strong>Status:</strong>{" "}
+                {selectedUser.status || "-"}
+              </p>
+
+              <p>
+                <strong>Created:</strong>{" "}
+                {selectedUser.createdAt
+                  ? new Date(
+                      selectedUser.createdAt
+                    ).toLocaleString()
+                  : "-"}
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  setIsViewDialogOpen(false);
+                  setSelectedUser(null);
+                }}
+                className="px-4 py-2 border rounded-md"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Users;

@@ -146,7 +146,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-          "Failed to load amenities."
+        "Failed to load amenities."
       );
     } finally {
       setLoading(false);
@@ -186,7 +186,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-          "Failed to load amenities types."
+        "Failed to load amenities types."
       );
     } finally {
       setTypeLoading(false);
@@ -347,9 +347,9 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-          error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Failed to save amenity."
+        error.response?.data?.message ||
+        error.response?.data?.error ||
+        "Failed to save amenity."
       );
     } finally {
       setSubmitting(false);
@@ -446,7 +446,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-          "Failed to delete amenity."
+        "Failed to delete amenity."
       );
     }
   };
@@ -1218,8 +1218,8 @@ function Amenities() {
                   {submitting
                     ? "Saving..."
                     : editingId
-                    ? "Update"
-                    : "Save"}
+                      ? "Update"
+                      : "Save"}
                 </button>
 
               </div>
