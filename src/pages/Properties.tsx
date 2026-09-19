@@ -32,7 +32,10 @@ import { PropertyDeleteDialog } from "@/components/properties/PropertyDeleteDial
 import { AmenityDetailsDialog } from "@/components/properties/AmenityDetailsDialog";
 import { PropertyFormDialog } from "@/components/properties/form/PropertyFormDialog";
 
-const propertyStatusCycle: Record<string, "available" | "under_construction" | "sold"> = {
+const propertyStatusCycle: Record<
+  string,
+  "available" | "under_construction" | "sold"
+> = {
   available: "under_construction",
   under_construction: "sold",
   sold: "available",
@@ -42,7 +45,6 @@ const Properties = () => {
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
-  // --- States ---
   const [properties, setProperties] = useState<Property[]>([]);
   const [isDraftView, setIsDraftView] = useState(false);
   const [stats, setStats] = useState<Stats>({
@@ -56,31 +58,36 @@ const Properties = () => {
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [amenityTypes, setAmenityTypes] = useState<AmenityType[]>([]);
-  const [amenityTypeCache, setAmenityTypeCache] = useState<Record<string, AmenityType[]>>({});
+  const [amenityTypeCache, setAmenityTypeCache] = useState<
+    Record<string, AmenityType[]>
+  >({});
   const [selectedAmenity, setSelectedAmenity] = useState("");
-  const [selectedAmenityTypes, setSelectedAmenityTypes] = useState<string[]>([]);
+  const [selectedAmenityTypes, setSelectedAmenityTypes] = useState<string[]>(
+    []
+  );
   const [amenityDropdownOpen, setAmenityDropdownOpen] = useState(false);
   const [amenityDetailsOpen, setAmenityDetailsOpen] = useState(false);
-  const [viewingAmenity, setViewingAmenity] = useState<FormAmenityData | null>(null);
-  const [editingAmenityIndex, setEditingAmenityIndex] = useState<number | null>(null);
+  const [viewingAmenity, setViewingAmenity] =
+    useState<FormAmenityData | null>(null);
+  const [editingAmenityIndex, setEditingAmenityIndex] = useState<number | null>(
+    null
+  );
 
-  const [formData, setFormData] = useState<PropertyFormData>(emptyFormData);
-  const [formActiveTab, setFormActiveTab] = useState<string>("basic");
+  const [formData, setFormData] =
+    useState<PropertyFormData>(emptyFormData);
+  const [formActiveTab, setFormActiveTab] = useState("basic");
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [open, setOpen] = useState(false);
 
-  // Quick View Modal State
-  const [quickViewProperty, setQuickViewProperty] = useState<Property | null>(null);
-  const [quickViewActiveImage, setQuickViewActiveImage] = useState<number>(0);
+  const [quickViewProperty, setQuickViewProperty] =
+    useState<Property | null>(null);
+  const [quickViewActiveImage, setQuickViewActiveImage] = useState(0);
 
-  // Filters & View State
   const [searchQuery, setSearchQuery] = useState(urlSearch);
 
   useEffect(() => {
     const q = searchParams.get("search") || searchParams.get("q");
-    if (q !== null && q !== undefined) {
-      setSearchQuery(q);
-    }
+    if (q !== null && q !== undefined) setSearchQuery(q);
   }, [searchParams]);
 
   const [filterType, setFilterType] = useState("all");
@@ -89,14 +96,15 @@ const Properties = () => {
   const [filterHighlight, setFilterHighlight] = useState("all");
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
-  // Loading & Alert States
   const [loading, setLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageTitle, setMessageTitle] = useState("");
   const [messageText, setMessageText] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [messageType, setMessageType] = useState<"success" | "error">(
+    "success"
+  );
 
   const showMessage = (
     type: "success" | "error",
@@ -118,8 +126,6 @@ const Properties = () => {
     return fallback;
   };
 
-  // --- API Calls ---
-
   const fetchPropertyTypes = async () => {
     try {
       const response = await axiosInstance.get("/type/property");
@@ -137,56 +143,26 @@ const Properties = () => {
 
   const fetchAmenities = async () => {
     try {
-      const [amenitiesRes, typeRes] = await Promise.allSettled([
-        axiosInstance.get("/amenities"),
-        axiosInstance.get("/type"),
-      ]);
+      const response = await axiosInstance.get("/amenitiestype");
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      const list = Array.isArray(result) ? result : [];
 
-      const list1 =
-        amenitiesRes.status === "fulfilled"
-          ? amenitiesRes.value?.data?.result ||
-            amenitiesRes.value?.data?.data ||
-            amenitiesRes.value?.data ||
-            []
-          : [];
-      const list2 =
-        typeRes.status === "fulfilled"
-          ? typeRes.value?.data?.result ||
-            typeRes.value?.data?.data ||
-            typeRes.value?.data ||
-            []
-          : [];
+      const mappedTypes: Amenity[] = list
+        .filter((item: any) => item?._id && item?.name)
+        .map((item: any) => ({
+          _id: item._id,
+          name: item.name,
+        }))
+        .sort((a: Amenity, b: Amenity) => a.name.localeCompare(b.name));
 
-      const mergedMap = new Map<string, Amenity>();
-      (Array.isArray(list1) ? list1 : []).forEach((item: any) => {
-        if (item?._id && item?.name) {
-          mergedMap.set(item.name.toUpperCase().trim(), {
-            _id: item._id,
-            name: item.name,
-          });
-        }
-      });
-      (Array.isArray(list2) ? list2 : []).forEach((item: any) => {
-        if (item?._id && item?.name) {
-          const key = item.name.toUpperCase().trim();
-          if (!mergedMap.has(key)) {
-            mergedMap.set(key, {
-              _id: item._id,
-              name: item.name,
-            });
-          }
-        }
-      });
-
-      const merged = Array.from(mergedMap.values()).sort((a, b) =>
-        a.name.localeCompare(b.name)
-      );
-      setAmenities(merged);
+      setAmenities(mappedTypes);
     } catch (error: any) {
+      setAmenities([]);
       showMessage(
         "error",
-        "Amenities Error",
-        getErrorMessage(error, "Failed to fetch amenities.")
+        "Amenities Type Error",
+        getErrorMessage(error, "Failed to fetch amenities types.")
       );
     }
   };
@@ -201,24 +177,44 @@ const Properties = () => {
     }
 
     try {
-      const response = await axiosInstance.get(`/type?amenities=${amenityId}`);
+      const response = await axiosInstance.get(
+        `/amenities?amenities_type=${amenityId}`
+      );
       const result =
         response?.data?.result || response?.data?.data || response?.data;
       const list = Array.isArray(result) ? result : [];
 
+      const mappedAmenities: AmenityType[] = list
+        .filter((item: any) => item?._id && item?.name)
+        .map((item: any) => ({
+          _id: item._id,
+          name: item.name,
+          amenity_id:
+            item?.amenities_type?._id ||
+            item?.amenities_type ||
+            amenityId,
+        }))
+        .sort((a: AmenityType, b: AmenityType) =>
+          a.name.localeCompare(b.name)
+        );
+
       setAmenityTypeCache((prev) => ({
         ...prev,
-        [amenityId]: list,
+        [amenityId]: mappedAmenities,
       }));
 
-      if (updateCurrent) setAmenityTypes(list);
-      return list;
+      if (updateCurrent) setAmenityTypes(mappedAmenities);
+      return mappedAmenities;
     } catch (error: any) {
       if (updateCurrent) setAmenityTypes([]);
+
       showMessage(
         "error",
         "Amenities Error",
-        getErrorMessage(error, "Failed to fetch related amenities.")
+        getErrorMessage(
+          error,
+          "Failed to fetch amenities for the selected type."
+        )
       );
       return [];
     }
@@ -248,6 +244,7 @@ const Properties = () => {
       const response = await axiosInstance.get("/property/stats");
       const result =
         response?.data?.result || response?.data?.data || response?.data;
+
       if (result) {
         setStats({
           total: Number(result.total) || 0,
@@ -277,8 +274,6 @@ const Properties = () => {
     fetchProperties(isDraftView);
   }, [isDraftView]);
 
-  // --- Handlers & Helpers ---
-
   const resetAmenitySelector = () => {
     setSelectedAmenity("");
     setSelectedAmenityTypes([]);
@@ -300,8 +295,10 @@ const Properties = () => {
     setEditingProperty(null);
   };
 
-  const handleInputChange = (field: keyof PropertyFormData, value: any) =>
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleInputChange = (
+    field: keyof PropertyFormData,
+    value: any
+  ) => setFormData((prev) => ({ ...prev, [field]: value }));
 
   const handleLocationChange = (
     field: "address" | "area" | "city" | "state" | "country" | "pincode",
@@ -309,7 +306,8 @@ const Properties = () => {
   ) => setFormData((prev) => ({ ...prev, [field]: value }));
 
   const selectedPropertyType = useMemo(
-    () => propertyTypes.find((type) => type._id === formData.type)?.name || "",
+    () =>
+      propertyTypes.find((type) => type._id === formData.type)?.name || "",
     [propertyTypes, formData.type]
   );
 
@@ -317,7 +315,9 @@ const Properties = () => {
     const type = selectedPropertyType.toLowerCase().trim();
     const isLand = /plot|land|site|farm|agricultural/.test(type);
     const isCommercial =
-      /office|shop|showroom|warehouse|commercial|retail|industrial|godown/.test(type);
+      /office|shop|showroom|warehouse|commercial|retail|industrial|godown/.test(
+        type
+      );
 
     if (!type || isLand) {
       return {
@@ -336,6 +336,7 @@ const Properties = () => {
         price_per_sqft: true,
       };
     }
+
     if (isCommercial) {
       return {
         category: "commercial",
@@ -353,6 +354,7 @@ const Properties = () => {
         price_per_sqft: true,
       };
     }
+
     return {
       category: "residential",
       bedrooms: true,
@@ -382,21 +384,22 @@ const Properties = () => {
       type: value,
       ...(isLand
         ? {
-            bedrooms: "",
-            bathrooms: "",
-            balconies: "",
-            floor_number: "",
-            total_floors: "",
-            property_age: "",
-            furnishing: "",
-            facing: "",
-            construction_status: "",
-            possession_date: "",
-          }
+          bedrooms: "",
+          bathrooms: "",
+          balconies: "",
+          floor_number: "",
+          total_floors: "",
+          property_age: "",
+          furnishing: "",
+          facing: "",
+          construction_status: "",
+          possession_date: "",
+        }
         : isCommercial
-        ? { bedrooms: "", bathrooms: "", balconies: "", furnishing: "" }
-        : {}),
+          ? { bedrooms: "", bathrooms: "", balconies: "", furnishing: "" }
+          : {}),
     }));
+
     resetAmenitySelector();
   };
 
@@ -436,10 +439,7 @@ const Properties = () => {
           amenities: selectedAmenity,
           amenity_types: selectedAmenityTypes,
         };
-        return {
-          ...prev,
-          amenities_data: updated,
-        };
+        return { ...prev, amenities_data: updated };
       }
 
       return {
@@ -488,12 +488,13 @@ const Properties = () => {
       ),
     }));
 
-    if (selectedAmenity === amenityId) {
-      resetAmenitySelector();
-    }
+    if (selectedAmenity === amenityId) resetAmenitySelector();
   };
 
-  const removeAmenityType = (amenityId: string, amenityTypeId: string) => {
+  const removeAmenityType = (
+    amenityId: string,
+    amenityTypeId: string
+  ) => {
     setFormData((prev) => ({
       ...prev,
       amenities_data: prev.amenities_data
@@ -501,11 +502,11 @@ const Properties = () => {
           item.amenities !== amenityId
             ? item
             : {
-                ...item,
-                amenity_types: item.amenity_types.filter(
-                  (id) => id !== amenityTypeId
-                ),
-              }
+              ...item,
+              amenity_types: item.amenity_types.filter(
+                (id) => id !== amenityTypeId
+              ),
+            }
         )
         .filter((item) => item.amenity_types.length > 0),
     }));
@@ -515,8 +516,9 @@ const Properties = () => {
     amenities.find((amenity) => amenity._id === id)?.name || id;
 
   const getAmenityTypeName = (amenityId: string, typeId: string) =>
-    (amenityTypeCache[amenityId] || []).find((type) => type._id === typeId)
-      ?.name ||
+    (amenityTypeCache[amenityId] || []).find(
+      (type) => type._id === typeId
+    )?.name ||
     (amenityId === selectedAmenity
       ? amenityTypes.find((type) => type._id === typeId)?.name
       : undefined) ||
@@ -529,13 +531,16 @@ const Properties = () => {
       .map((item: any) => {
         const rawTypes = item?.amenity_types || item?.amenitie_tyep;
         const typesList = Array.isArray(rawTypes) ? rawTypes : [];
+
         return {
           amenities:
             typeof item?.amenities === "string"
               ? item.amenities
               : item?.amenities?._id || item?.amemities || "",
           amenity_types: typesList
-            .map((type: any) => (typeof type === "string" ? type : type?._id))
+            .map((type: any) =>
+              typeof type === "string" ? type : type?._id
+            )
             .filter(Boolean),
         };
       })
@@ -544,11 +549,16 @@ const Properties = () => {
     const possessionDate = property?.possession_date
       ? new Date(property.possession_date).toISOString().split("T")[0]
       : "";
-    const str = (v: any) => (v !== undefined && v !== null ? String(v) : "");
+
+    const str = (v: any) =>
+      v !== undefined && v !== null ? String(v) : "";
 
     setFormData({
       name: property.name || "",
-      type: typeof property.type === "string" ? property.type : property.type?._id || "",
+      type:
+        typeof property.type === "string"
+          ? property.type
+          : property.type?._id || "",
       listing_type: property.listing_type || "sale",
       description: property.description || "",
       address: property.location?.address || "",
@@ -572,17 +582,19 @@ const Properties = () => {
       possession_date: possessionDate,
       property_age: str(property.property_age),
       parking: str(property.parking),
-      image_url: Array.isArray(property.image_url) ? property.image_url : [],
+      image_url: Array.isArray(property.image_url)
+        ? property.image_url
+        : [],
       map_url: property.map_url || "",
       media_url: property.media_url || "",
       amenities_data: mappedAmenities,
       nearby_places: Array.isArray(property.nearby_places)
         ? property.nearby_places.map((place) => ({
-            name: place.name || "",
-            type: place.type || "",
-            distance: str(place.distance),
-            distance_unit: place.distance_unit || "km",
-          }))
+          name: place.name || "",
+          type: place.type || "",
+          distance: str(place.distance),
+          distance_unit: place.distance_unit || "km",
+        }))
         : [],
       owner_name: property.owner_name || "",
       developer_name: property.developer_name || "",
@@ -600,7 +612,9 @@ const Properties = () => {
     setFormActiveTab("basic");
 
     await Promise.all(
-      mappedAmenities.map((item) => fetchAmenityTypes(item.amenities, false))
+      mappedAmenities.map((item) =>
+        fetchAmenityTypes(item.amenities, false)
+      )
     );
 
     setOpen(true);
@@ -648,8 +662,7 @@ const Properties = () => {
       showMessage(
         "success",
         "Images Uploaded",
-        `${uploadedUrls.length} image${
-          uploadedUrls.length > 1 ? "s" : ""
+        `${uploadedUrls.length} image${uploadedUrls.length > 1 ? "s" : ""
         } uploaded successfully.`
       );
     } catch (error: any) {
@@ -747,7 +760,9 @@ const Properties = () => {
     try {
       setLoading(true);
 
-      const toNum = (v: string) => (v === "" ? undefined : Number(v));
+      const toNum = (v: string) =>
+        v === "" ? undefined : Number(v);
+
       const propertyData: any = {
         name: formData.name.trim(),
         type: formData.type,
@@ -765,23 +780,45 @@ const Properties = () => {
         area_unit: formData.area_unit,
         price: toNum(formData.price),
         price_per_sqft: toNum(formData.price_per_sqft),
-        bedrooms: propertyTypeFields.bedrooms ? toNum(formData.bedrooms) : undefined,
-        bathrooms: propertyTypeFields.bathrooms ? toNum(formData.bathrooms) : undefined,
-        balconies: propertyTypeFields.balconies ? toNum(formData.balconies) : undefined,
-        floor_number: propertyTypeFields.floor_number ? toNum(formData.floor_number) : undefined,
-        total_floors: propertyTypeFields.total_floors ? toNum(formData.total_floors) : undefined,
-        furnishing: propertyTypeFields.furnishing ? formData.furnishing || undefined : undefined,
-        facing: propertyTypeFields.facing ? formData.facing || undefined : undefined,
-        construction_status: propertyTypeFields.construction_status ? formData.construction_status || undefined : undefined,
-        possession_date: propertyTypeFields.possession_date ? formData.possession_date || undefined : undefined,
-        property_age: propertyTypeFields.property_age ? toNum(formData.property_age) : undefined,
+        bedrooms: propertyTypeFields.bedrooms
+          ? toNum(formData.bedrooms)
+          : undefined,
+        bathrooms: propertyTypeFields.bathrooms
+          ? toNum(formData.bathrooms)
+          : undefined,
+        balconies: propertyTypeFields.balconies
+          ? toNum(formData.balconies)
+          : undefined,
+        floor_number: propertyTypeFields.floor_number
+          ? toNum(formData.floor_number)
+          : undefined,
+        total_floors: propertyTypeFields.total_floors
+          ? toNum(formData.total_floors)
+          : undefined,
+        furnishing: propertyTypeFields.furnishing
+          ? formData.furnishing || undefined
+          : undefined,
+        facing: propertyTypeFields.facing
+          ? formData.facing || undefined
+          : undefined,
+        construction_status: propertyTypeFields.construction_status
+          ? formData.construction_status || undefined
+          : undefined,
+        possession_date: propertyTypeFields.possession_date
+          ? formData.possession_date || undefined
+          : undefined,
+        property_age: propertyTypeFields.property_age
+          ? toNum(formData.property_age)
+          : undefined,
         parking: propertyTypeFields.parking
           ? formData.parking
             ? String(formData.parking)
             : undefined
           : undefined,
         amenities_data: formData.amenities_data
-          .filter((item) => item.amenities && item.amenities.trim() !== "")
+          .filter(
+            (item) => item.amenities && item.amenities.trim() !== ""
+          )
           .map((item) => ({
             amenities: item.amenities,
             amenity_types: Array.isArray(item.amenity_types)
@@ -868,10 +905,14 @@ const Properties = () => {
     try {
       setLoading(true);
 
-      const toNum = (v: string) => (v === "" ? undefined : Number(v));
+      const toNum = (v: string) =>
+        v === "" ? undefined : Number(v);
+
       const draftName =
         formData.name.trim() ||
-        (editingProperty?.name ? editingProperty.name : "Untitled Draft");
+        (editingProperty?.name
+          ? editingProperty.name
+          : "Untitled Draft");
 
       const draftData: any = {
         name: draftName,
@@ -926,7 +967,9 @@ const Properties = () => {
             : undefined
           : undefined,
         amenities_data: formData.amenities_data
-          .filter((item) => item.amenities && item.amenities.trim() !== "")
+          .filter(
+            (item) => item.amenities && item.amenities.trim() !== ""
+          )
           .map((item) => ({
             amenities: item.amenities,
             amenity_types: Array.isArray(item.amenity_types)
@@ -998,7 +1041,10 @@ const Properties = () => {
   const handlePublishDraft = async (property: Property) => {
     const hasType =
       property.type &&
-      (typeof property.type === "object" ? property.type._id : property.type);
+      (typeof property.type === "object"
+        ? property.type._id
+        : property.type);
+
     const hasName =
       property.name &&
       property.name.trim() !== "" &&
@@ -1019,11 +1065,13 @@ const Properties = () => {
       await axiosInstance.put(`/property/${property._id}/publish`, {
         status: "available",
       });
+
       showMessage(
         "success",
         "Property Published",
         `"${property.name}" is now live and published successfully.`
       );
+
       await fetchProperties(isDraftView);
       await fetchPropertyStats();
     } catch (error: any) {
@@ -1044,11 +1092,13 @@ const Properties = () => {
       setLoading(true);
       await axiosInstance.delete(`/property/${deleteId}`);
       setDeleteId(null);
+
       showMessage(
         "success",
         "Property Deleted",
         "Property deleted successfully."
       );
+
       await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
@@ -1076,6 +1126,7 @@ const Properties = () => {
         "Status Updated",
         `Property status changed to ${nextStatus.replace(/_/g, " ")}.`
       );
+
       await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
@@ -1089,10 +1140,12 @@ const Properties = () => {
 
   const handleToggleFeatured = async (property: Property) => {
     const nextVal = !property.isFeatured;
-    // Optimistic UI update
+
     setProperties((prev) =>
       prev.map((p) =>
-        p._id === property._id ? { ...p, isFeatured: nextVal } : p
+        p._id === property._id
+          ? { ...p, isFeatured: nextVal }
+          : p
       )
     );
 
@@ -1100,21 +1153,26 @@ const Properties = () => {
       await axiosInstance.put(`/property/${property._id}`, {
         isFeatured: nextVal,
       });
+
       showMessage(
         "success",
         nextVal ? "Featured Added" : "Featured Removed",
-        `"${property.name}" is ${
-          nextVal ? "now featured on showcase" : "no longer featured"
+        `"${property.name}" is ${nextVal
+          ? "now featured on showcase"
+          : "no longer featured"
         }.`
       );
+
       await fetchPropertyStats();
     } catch (error: any) {
-      // Revert optimistic update on failure
       setProperties((prev) =>
         prev.map((p) =>
-          p._id === property._id ? { ...p, isFeatured: !nextVal } : p
+          p._id === property._id
+            ? { ...p, isFeatured: !nextVal }
+            : p
         )
       );
+
       showMessage(
         "error",
         "Update Failed",
@@ -1125,10 +1183,12 @@ const Properties = () => {
 
   const handleToggleVerified = async (property: Property) => {
     const nextVal = !property.isVerified;
-    // Optimistic UI update
+
     setProperties((prev) =>
       prev.map((p) =>
-        p._id === property._id ? { ...p, isVerified: nextVal } : p
+        p._id === property._id
+          ? { ...p, isVerified: nextVal }
+          : p
       )
     );
 
@@ -1136,34 +1196,39 @@ const Properties = () => {
       await axiosInstance.put(`/property/${property._id}`, {
         isVerified: nextVal,
       });
+
       showMessage(
         "success",
         nextVal ? "Listing Verified" : "Verification Removed",
-        `"${property.name}" verification badge ${
-          nextVal ? "enabled" : "removed"
+        `"${property.name}" verification badge ${nextVal ? "enabled" : "removed"
         }.`
       );
+
       await fetchPropertyStats();
     } catch (error: any) {
-      // Revert optimistic update on failure
       setProperties((prev) =>
         prev.map((p) =>
-          p._id === property._id ? { ...p, isVerified: !nextVal } : p
+          p._id === property._id
+            ? { ...p, isVerified: !nextVal }
+            : p
         )
       );
+
       showMessage(
         "error",
         "Update Failed",
-        getErrorMessage(error, "Failed to update verification status.")
+        getErrorMessage(
+          error,
+          "Failed to update verification status."
+        )
       );
     }
   };
 
-  // --- Filtering & Stats ---
-
   const getPropertyTypeName = (type: any) => {
     if (!type) return "Property";
     if (typeof type === "object") return type.name || "Property";
+
     const found = propertyTypes.find((item) => item._id === type);
     return found?.name || "Property";
   };
@@ -1173,7 +1238,9 @@ const Properties = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const typeName = getPropertyTypeName(property.type).toLowerCase();
-        const matchesName = (property.name || "").toLowerCase().includes(q);
+        const matchesName = (property.name || "")
+          .toLowerCase()
+          .includes(q);
         const matchesCity = (property.location?.city || "")
           .toLowerCase()
           .includes(q);
@@ -1209,24 +1276,29 @@ const Properties = () => {
           typeof property.type === "object"
             ? property.type?._id
             : property.type;
+
         if (typeId !== filterType) return false;
       }
 
-      if (filterListing !== "all") {
-        if ((property.listing_type || "sale") !== filterListing) return false;
-      }
-
-      if (filterStatus !== "all") {
-        if ((property.status || "available") !== filterStatus) return false;
-      }
-
-      if (filterHighlight === "featured" && !property.isFeatured) {
+      if (
+        filterListing !== "all" &&
+        (property.listing_type || "sale") !== filterListing
+      ) {
         return false;
       }
 
-      if (filterHighlight === "verified" && !property.isVerified) {
+      if (
+        filterStatus !== "all" &&
+        (property.status || "available") !== filterStatus
+      ) {
         return false;
       }
+
+      if (filterHighlight === "featured" && !property.isFeatured)
+        return false;
+
+      if (filterHighlight === "verified" && !property.isVerified)
+        return false;
 
       return true;
     });
@@ -1257,19 +1329,20 @@ const Properties = () => {
 
   return (
     <div className="space-y-7">
-      {/* Top Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-black tracking-tight text-slate-950">
               {isDraftView ? "Draft Properties" : "Properties Portfolio"}
             </h1>
+
             {isDraftView && (
               <span className="rounded-full bg-purple-900 text-white border border-purple-950 text-[11px] font-black px-3 py-0.5 shadow-xs uppercase tracking-wider">
                 Admin Drafts Only
               </span>
             )}
           </div>
+
           <p className="mt-1 text-xs font-semibold text-slate-600">
             {isDraftView
               ? "Review, edit, and publish saved property drafts before they go live."
@@ -1285,7 +1358,8 @@ const Properties = () => {
             }}
             className="h-11 rounded-2xl bg-gradient-to-r from-primary to-rose-600 px-5 font-black text-white shadow-md shadow-primary/25 hover:opacity-95"
           >
-            <Plus className="mr-2 h-4 w-4 stroke-[3]" /> Add Property
+            <Plus className="mr-2 h-4 w-4 stroke-[3]" />
+            Add Property
           </Button>
 
           <Button
@@ -1294,14 +1368,21 @@ const Properties = () => {
               setIsDraftView(!isDraftView);
               clearFilters();
             }}
-            className={`h-11 rounded-2xl px-4 font-black transition flex items-center gap-2 ${
+            className={`h-11 rounded-2xl px-4 font-black transition flex items-center gap-2 ${isDraftView
+              ? "bg-purple-900 text-white hover:bg-purple-950 shadow-md shadow-purple-900/30 border border-purple-950"
+              : "border-2 border-purple-800 text-purple-900 hover:bg-purple-100/70 hover:text-purple-950 bg-purple-50 shadow-xs"
+              }`}
+            title={
               isDraftView
-                ? "bg-purple-900 text-white hover:bg-purple-950 shadow-md shadow-purple-900/30 border border-purple-950"
-                : "border-2 border-purple-800 text-purple-900 hover:bg-purple-100/70 hover:text-purple-950 bg-purple-50 shadow-xs"
-            }`}
-            title={isDraftView ? "Return to active portfolio" : "View unpublished draft properties"}
+                ? "Return to active portfolio"
+                : "View unpublished draft properties"
+            }
           >
-            <FileText className={`h-4 w-4 stroke-[2.5] ${isDraftView ? "text-amber-300" : "text-purple-800"}`} />
+            <FileText
+              className={`h-4 w-4 stroke-[2.5] ${isDraftView ? "text-amber-300" : "text-purple-800"
+                }`}
+            />
+
             <span>
               {isDraftView
                 ? "Live Portfolio"
@@ -1311,22 +1392,28 @@ const Properties = () => {
         </div>
       </div>
 
-      {/* Admin Draft Mode Banner */}
       {isDraftView && (
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border-2 border-purple-300 bg-gradient-to-r from-purple-100 via-purple-50 to-indigo-50 px-5 py-3.5 text-xs shadow-xs">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-800 text-white font-black text-xs shrink-0 shadow-sm">
               <FileText className="h-5 w-5 text-amber-300" />
             </div>
+
             <div>
               <p className="font-black text-purple-950 text-sm">
-                Admin Drafts Archive ({properties.length} {properties.length === 1 ? "draft listing" : "draft listings"})
+                Admin Drafts Archive ({properties.length}{" "}
+                {properties.length === 1
+                  ? "draft listing"
+                  : "draft listings"})
               </p>
+
               <p className="text-xs text-purple-900 font-semibold mt-0.5">
-                Drafts are confidential for internal editing and are completely hidden from the public website until published.
+                Drafts are confidential for internal editing and are
+                completely hidden from the public website until published.
               </p>
             </div>
           </div>
+
           <Button
             size="sm"
             variant="outline"
@@ -1338,19 +1425,19 @@ const Properties = () => {
         </div>
       )}
 
-      {/* KPI Metric Cards */}
       <PropertyStatsCards
         stats={stats}
         activeStatusFilter={filterStatus}
         activeHighlightFilter={filterHighlight}
-        onFilterStatus={(s) => setFilterStatus(filterStatus === s ? "all" : s)}
+        onFilterStatus={(s) =>
+          setFilterStatus(filterStatus === s ? "all" : s)
+        }
         onFilterHighlight={(h) =>
           setFilterHighlight(filterHighlight === h ? "all" : h)
         }
         onResetFilters={clearFilters}
       />
 
-      {/* Filter & Search Control Panel */}
       <PropertyFilters
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
@@ -1371,31 +1458,35 @@ const Properties = () => {
         clearFilters={clearFilters}
       />
 
-      {/* Properties Display (Grid or Table) */}
       {loading && properties.length === 0 ? (
         <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-card p-12 text-center shadow-xs">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm font-bold text-slate-800">Loading properties...</p>
+          <p className="text-sm font-bold text-slate-800">
+            Loading properties...
+          </p>
         </div>
       ) : filteredProperties.length === 0 ? (
         <div className="flex min-h-[300px] flex-col items-center justify-center gap-3 rounded-2xl border border-slate-200 bg-card p-12 text-center shadow-xs">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
             <Building2 className="h-7 w-7" />
           </div>
+
           <div>
             <h3 className="text-base font-black text-slate-950">
               {isDraftView
                 ? "No draft properties found"
                 : "No properties match your query"}
             </h3>
+
             <p className="mt-1 text-xs font-semibold text-slate-600">
               {isDraftView
                 ? "You don't have any saved drafts. Create a property and click 'Save as Draft' to store it here."
                 : hasActiveFilters
-                ? "Try adjusting your search criteria or clearing filters."
-                : "Get started by publishing your first property listing."}
+                  ? "Try adjusting your search criteria or clearing filters."
+                  : "Get started by publishing your first property listing."}
             </p>
           </div>
+
           {hasActiveFilters ? (
             <Button
               variant="outline"
@@ -1456,7 +1547,6 @@ const Properties = () => {
         />
       )}
 
-      {/* Property Form Dialog */}
       <PropertyFormDialog
         open={open}
         onOpenChange={(val) => {
@@ -1501,7 +1591,6 @@ const Properties = () => {
         removeNearbyPlace={removeNearbyPlace}
       />
 
-      {/* Property Quick View Modal */}
       <PropertyQuickViewDialog
         property={quickViewProperty}
         activeImage={quickViewActiveImage}
@@ -1512,7 +1601,6 @@ const Properties = () => {
         getAmenityName={getAmenityName}
       />
 
-      {/* Amenities Details Modal */}
       <AmenityDetailsDialog
         open={amenityDetailsOpen}
         onOpenChange={setAmenityDetailsOpen}
@@ -1521,7 +1609,6 @@ const Properties = () => {
         getAmenityTypeName={getAmenityTypeName}
       />
 
-      {/* Delete Confirmation Modal */}
       <PropertyDeleteDialog
         open={Boolean(deleteId)}
         onOpenChange={(val) => !val && setDeleteId(null)}
@@ -1529,16 +1616,14 @@ const Properties = () => {
         loading={loading}
       />
 
-      {/* Notification Message Modal */}
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
         <DialogContent className="w-[92vw] max-w-sm rounded-3xl p-6 border border-slate-200">
           <div className="flex flex-col items-center text-center">
             <div
-              className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${
-                messageType === "success"
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : "bg-rose-500/10 text-rose-600"
-              }`}
+              className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${messageType === "success"
+                ? "bg-emerald-500/10 text-emerald-600"
+                : "bg-rose-500/10 text-rose-600"
+                }`}
             >
               {messageType === "success" ? (
                 <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
@@ -1547,8 +1632,13 @@ const Properties = () => {
               )}
             </div>
 
-            <DialogTitle className="text-lg font-black text-slate-950">{messageTitle}</DialogTitle>
-            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700">{messageText}</p>
+            <DialogTitle className="text-lg font-black text-slate-950">
+              {messageTitle}
+            </DialogTitle>
+
+            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700">
+              {messageText}
+            </p>
 
             <Button
               className="mt-6 w-full rounded-2xl font-black bg-primary text-white shadow-md shadow-primary/25"
