@@ -12,14 +12,6 @@ import {
   Square,
   Eye,
   Edit,
-  Shield,
-  Droplets,
-  Car,
-  GraduationCap,
-  Activity,
-  HeartPulse,
-  ShoppingBag,
-  Layers,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,18 +56,7 @@ interface TabAmenitiesNearbyProps {
   removeNearbyPlace: (index: number) => void;
 }
 
-// Icon helper for standard amenities categories
-const getAmenityCategoryIcon = (name: string) => {
-  const lower = name.toLowerCase();
-  if (lower.includes("security") || lower.includes("guard")) return Shield;
-  if (lower.includes("water")) return Droplets;
-  if (lower.includes("transport") || lower.includes("road") || lower.includes("bus")) return Car;
-  if (lower.includes("education") || lower.includes("school")) return GraduationCap;
-  if (lower.includes("recreation") || lower.includes("sport") || lower.includes("pool") || lower.includes("club")) return Activity;
-  if (lower.includes("health") || lower.includes("hospital") || lower.includes("medical")) return HeartPulse;
-  if (lower.includes("shop") || lower.includes("retail") || lower.includes("mall")) return ShoppingBag;
-  return Sparkles;
-};
+
 
 export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
   formData,
@@ -162,10 +143,7 @@ export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
     }
   };
 
-  const selectedCategoryObj = amenities.find((a) => a._id === selectedAmenity);
-  const SelectedCategoryIcon = selectedCategoryObj
-    ? getAmenityCategoryIcon(selectedCategoryObj.name)
-    : Sparkles;
+
 
   return (
     <div className="space-y-6">
@@ -213,10 +191,7 @@ export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
                 <SelectTrigger className="h-10 rounded-xl border-slate-200 bg-white text-xs font-semibold text-slate-900 shadow-xs hover:border-slate-300 focus:ring-1 focus:ring-primary">
                   <div className="flex items-center gap-2 truncate">
                     {selectedAmenity ? (
-                      <>
-                        <SelectedCategoryIcon className="h-4 w-4 text-primary shrink-0" />
-                        <span className="truncate">{resolveCategoryName(selectedAmenity)}</span>
-                      </>
+                      <span className="truncate">{resolveCategoryName(selectedAmenity)}</span>
                     ) : (
                       <span className="text-slate-400 font-normal">
                         Choose Amenities Type (e.g. Recreation, Security...)
@@ -225,21 +200,15 @@ export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
                   </div>
                 </SelectTrigger>
                 <SelectContent className="rounded-xl max-h-64 shadow-xl border-slate-200">
-                  {amenities.map((item) => {
-                    const Icon = getAmenityCategoryIcon(item.name);
-                    return (
-                      <SelectItem
-                        key={item._id}
-                        value={item._id}
-                        className="text-xs font-semibold text-slate-800 py-2.5 px-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 focus:text-slate-950 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-950"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 text-primary shrink-0" />
-                          <span className="font-semibold text-slate-900">{item.name}</span>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
+                  {amenities.map((item) => (
+                    <SelectItem
+                      key={item._id}
+                      value={item._id}
+                      className="text-xs font-semibold text-slate-800 py-2.5 px-3 rounded-lg cursor-pointer transition-colors focus:bg-slate-100 focus:text-slate-950 data-[highlighted]:bg-slate-100 data-[highlighted]:text-slate-950"
+                    >
+                      <span className="font-semibold text-slate-900">{item.name}</span>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -437,7 +406,6 @@ export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {formData.amenities_data.map((item, idx) => {
                 const categoryName = resolveCategoryName(item.amenities);
-                const Icon = getAmenityCategoryIcon(categoryName);
                 const typesList = Array.isArray(item.amenity_types)
                   ? item.amenity_types
                   : [];
@@ -450,9 +418,6 @@ export const TabAmenitiesNearby: React.FC<TabAmenitiesNearbyProps> = ({
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                            <Icon className="h-3.5 w-3.5" />
-                          </div>
                           <span className="text-xs font-bold text-slate-900">
                             {categoryName}
                           </span>
