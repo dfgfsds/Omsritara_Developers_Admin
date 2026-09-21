@@ -1,6 +1,7 @@
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import { Plus, Search, Pencil, Trash2, X } from "lucide-react";
+import axiosInstance from "@/lib/axiosInstance";
 
 type AmenityType = {
   _id?: string;
@@ -26,7 +27,7 @@ function Amenitiestype() {
   // Modal
   const [showModal, setShowModal] = useState(false);
 
-  const API_URL = "http://localhost:9000/amenitiestype";
+  const API_URL = "https://api.omsritaradevelopers.in/amenitiestype";
 
   // ==========================================
   // GET ALL AMENITIES TYPES
@@ -37,7 +38,7 @@ function Amenitiestype() {
       setLoading(true);
       setError("");
 
-      const response = await axios.get(API_URL);
+      const response = await axiosInstance.get("/amenitiestype");
 
       console.log("GET RESPONSE:", response.data);
 
@@ -108,8 +109,8 @@ function Amenitiestype() {
       // ==============================
 
       if (editingId) {
-        const response = await axios.put(
-          `${API_URL}/${editingId}`,
+        const response = await axiosInstance.put(
+          `/amenitiestype/${editingId}`,
           payload
         );
 
@@ -123,7 +124,7 @@ function Amenitiestype() {
       // ==============================
 
       else {
-        const response = await axios.post(API_URL, payload);
+        const response = await axiosInstance.post("/amenitiestype", payload);
 
         console.log("CREATE RESPONSE:", response.data);
 
@@ -193,7 +194,7 @@ function Amenitiestype() {
     try {
       setError("");
 
-      await axios.delete(`${API_URL}/${itemId}`);
+      await axiosInstance.delete(`/amenitiestype/${itemId}`);
 
       alert("Amenities type deleted successfully.");
 

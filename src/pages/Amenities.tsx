@@ -1,35 +1,7 @@
-// import axios from 'axios'
-// import React, { useEffect, useState } from 'react'
-
-// function Amenities() {
-// const [data,setData]=useState();
-
-
-
-// console.log(data)
-//   const getapi =async()=>{
-//     const updated = await axios.get("http://localhost:5000/amenities") 
-//   console.log(updated)
-//       setData(updated?.data?.result)}
-
-
-//   useEffect(()=>{
-// getapi();
-//   },[])
-//   return (
-//     <div>
-//       <h1>{data?.map((item:any)=>(
-//         <h1>{item?.name}</h1>
-//       ))}</h1>
-//     </div>
-//   )
-// }
-
-// export default Amenities
-
 import axios from "axios";
 import React, { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
+import axiosInstance from "@/lib/axiosInstance";
 
 // ==========================================
 // AMENITY TYPE
@@ -111,12 +83,11 @@ function Amenities() {
   // API URLS
   // ==========================================
 
-  const AMENITIES_API = "http://localhost:9000/amenities";
+  const AMENITIES_API = "https://api.omsritaradevelopers.in/amenities";
 
   const AMENITIES_TYPE_API =
-    "http://localhost:9000/amenitiestype";
+    "https://api.omsritaradevelopers.in/amenitiestype";
 
-  // ==========================================
   // GET ALL AMENITIES
   // ==========================================
 
@@ -125,7 +96,7 @@ function Amenities() {
       setLoading(true);
       setError("");
 
-      const response = await axios.get(AMENITIES_API);
+      const response = await axiosInstance.get("/amenities");
 
       console.log(
         "AMENITIES GET RESPONSE:",
@@ -161,8 +132,8 @@ function Amenities() {
     try {
       setTypeLoading(true);
 
-      const response = await axios.get(
-        AMENITIES_TYPE_API
+      const response = await axiosInstance.get(
+        "/amenitiestype"
       );
 
       console.log(
@@ -279,8 +250,8 @@ function Amenities() {
       // ----------------------------------------
 
       if (editingId) {
-        const response = await axios.put(
-          `${AMENITIES_API}/${editingId}`,
+        const response = await axiosInstance.put(
+          `/amenities/${editingId}`,
           payload
         );
 
@@ -299,8 +270,8 @@ function Amenities() {
       // ----------------------------------------
 
       else {
-        const response = await axios.post(
-          AMENITIES_API,
+        const response = await axiosInstance.post(
+          "/amenities",
           payload
         );
 
@@ -435,8 +406,8 @@ function Amenities() {
     try {
       setError("");
 
-      await axios.delete(
-        `${AMENITIES_API}/${itemId}`
+      await axiosInstance.delete(
+        `/amenities/${itemId}`
       );
 
       alert(
