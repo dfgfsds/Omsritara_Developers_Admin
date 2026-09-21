@@ -47,9 +47,9 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
   const amenitiesCount = property.amenities_data?.length || 0;
 
   return (
-    <div className="group flex flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-1.5 hover:shadow-xl hover:border-slate-300">
+    <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-slate-300">
       {/* Card Photo & Badges */}
-      <div className="relative aspect-16/10 w-full overflow-hidden bg-slate-950">
+      <div className="relative aspect-16/9 w-full overflow-hidden bg-slate-950">
         <img
           src={cover.url}
           alt={property.name || "Property Showcase"}
@@ -60,14 +60,14 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           }}
         />
 
-        {/* Minimal delicate top gradient vignette - never obscures the photo */}
-        <div className="absolute inset-x-0 top-0 h-14 bg-gradient-to-b from-black/45 via-black/15 to-transparent pointer-events-none" />
+        {/* Minimal delicate top gradient vignette */}
+        <div className="absolute inset-x-0 top-0 h-12 bg-gradient-to-b from-black/50 via-black/15 to-transparent pointer-events-none" />
 
-        {/* Floating Top Header: Clean, non-intrusive corner chips with comfortable spacing */}
-        <div className="absolute inset-x-3.5 top-3.5 flex items-center justify-between z-20 pointer-events-none">
-          {/* Top Left: Purpose & Status chips side-by-side with generous margin from the corner */}
-          <div className="flex items-center gap-2 pointer-events-auto">
-            <span className="rounded-full bg-slate-950/80 backdrop-blur-md text-white px-3 py-1 text-[10px] font-black uppercase tracking-wider shadow-sm border border-white/20">
+        {/* Floating Top Header: Clean, non-intrusive corner chips */}
+        <div className="absolute inset-x-3 top-2.5 flex items-center justify-between z-20 pointer-events-none">
+          {/* Top Left: Purpose & Status chips */}
+          <div className="flex items-center gap-1.5 pointer-events-auto">
+            <span className="rounded-full bg-slate-950/80 backdrop-blur-md text-white px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider shadow-sm border border-white/20">
               For {property.listing_type || "Sale"}
             </span>
 
@@ -79,7 +79,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
                 onStatusChange(property);
               }}
               title="Click to cycle status (Available / Under Construction / Sold)"
-              className={`rounded-full border px-3 py-1 text-[10px] font-black capitalize shadow-sm transition hover:scale-105 active:scale-95 ${getStatusBadgeVariant(
+              className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize shadow-sm transition hover:scale-105 active:scale-95 ${getStatusBadgeVariant(
                 property.status
               )}`}
             >
@@ -87,9 +87,8 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
             </button>
           </div>
 
-          {/* Top Right: Compact Circular Glass Icon Toggles for Feature & Verify */}
-          <div className="flex items-center gap-1.5 pointer-events-auto">
-            {/* Interactive Featured Toggle */}
+          {/* Top Right: Star (Featured) & Shield (Verified) Toggles */}
+          <div className="flex items-center gap-1 pointer-events-auto">
             <button
               type="button"
               onClick={(e) => {
@@ -97,20 +96,19 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
                 onToggleFeatured?.(property);
               }}
               title={property.isFeatured ? "Featured listing (Click to remove)" : "Click to feature this property"}
-              className={`flex h-7 w-7 items-center justify-center rounded-full shadow-md backdrop-blur-md transition-all active:scale-90 ${
+              className={`flex h-6.5 w-6.5 items-center justify-center rounded-full shadow-md backdrop-blur-md transition-all active:scale-90 ${
                 property.isFeatured
                   ? "bg-amber-500 text-white ring-2 ring-white/60 shadow-amber-500/40"
                   : "bg-slate-950/60 text-white/80 hover:bg-amber-500 hover:text-white border border-white/20"
               }`}
             >
               <Star
-                className={`h-3.5 w-3.5 ${
+                className={`h-3 w-3 ${
                   property.isFeatured ? "fill-white text-white" : "text-amber-400"
                 }`}
               />
             </button>
 
-            {/* Interactive Verified Toggle */}
             <button
               type="button"
               onClick={(e) => {
@@ -118,64 +116,62 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
                 onToggleVerified?.(property);
               }}
               title={property.isVerified ? "Verified listing (Click to remove)" : "Click to verify listing"}
-              className={`flex h-7 w-7 items-center justify-center rounded-full shadow-md backdrop-blur-md transition-all active:scale-90 ${
+              className={`flex h-6.5 w-6.5 items-center justify-center rounded-full shadow-md backdrop-blur-md transition-all active:scale-90 ${
                 property.isVerified
                   ? "bg-emerald-600 text-white ring-2 ring-white/60 shadow-emerald-600/40"
                   : "bg-slate-950/60 text-white/80 hover:bg-emerald-600 hover:text-white border border-white/20"
               }`}
             >
-              <ShieldCheck className="h-3.5 w-3.5 stroke-[2.5]" />
+              <ShieldCheck className="h-3 w-3 stroke-[2.5]" />
             </button>
           </div>
         </div>
+
+        {/* Amenities counter badge floating at bottom right of image */}
+        {amenitiesCount > 0 && (
+          <div className="absolute bottom-2 right-2.5 z-10 flex items-center gap-1 rounded-md bg-slate-950/75 backdrop-blur-xs px-2 py-0.5 text-[10px] font-semibold text-white/95 border border-white/15 shadow-xs">
+            <Layers className="h-3 w-3 text-white" />
+            <span>{amenitiesCount} {amenitiesCount === 1 ? "Amenity" : "Amenities"}</span>
+          </div>
+        )}
       </div>
 
-      {/* Card Body with generous padding away from all edges */}
-      <div className="flex flex-1 flex-col p-5 sm:p-6">
-        {/* Title & Type */}
-        <div className="mb-2">
-          <h3
-            className="line-clamp-1 text-sm font-black text-slate-950 transition group-hover:text-primary cursor-pointer"
-            onClick={() => onQuickView(property)}
-          >
-            {property.name || "Exclusive Property"}
-          </h3>
-          <div className="flex items-center gap-1.5 mt-1.5 text-xs font-bold text-primary flex-wrap">
-            <span>{getPropertyTypeName(property.type)}</span>
-            {property.project_name && (
-              <>
-                <span className="text-slate-300">•</span>
-                <span className="text-slate-600 font-semibold truncate">
-                  {property.project_name}
-                </span>
-              </>
-            )}
-
-            {/* Badges in Card Body: Architectural Visual, Featured, Verified */}
+      {/* Card Body - Compact and neatly structured */}
+      <div className="flex flex-1 flex-col p-3.5 sm:p-4">
+        {/* Title, Visual Tag & Subtitle */}
+        <div>
+          <div className="flex items-start justify-between gap-1.5">
+            <h3
+              className="line-clamp-1 text-sm font-black text-slate-950 transition hover:text-primary cursor-pointer flex-1"
+              onClick={() => onQuickView(property)}
+              title={property.name || "Exclusive Property"}
+            >
+              {property.name || "Exclusive Property"}
+            </h3>
             {!cover.isReal && cover.badgeText && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 bg-amber-50 border border-amber-300 px-2 py-0.5 rounded-md shadow-2xs">
+              <span className="inline-flex shrink-0 items-center gap-1 text-[9px] font-bold text-amber-800 bg-amber-50 border border-amber-300 px-1.5 py-0.5 rounded shadow-2xs">
                 <Sparkles className="h-2.5 w-2.5 text-amber-600" />
                 {cover.badgeText}
               </span>
             )}
-            {property.isFeatured && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-900 bg-amber-100/70 border border-amber-300 px-1.5 py-0.5 rounded-md">
-                <Star className="h-2.5 w-2.5 fill-amber-500 text-amber-500" />
-                Featured
-              </span>
-            )}
-            {property.isVerified && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-black text-emerald-900 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.5 rounded-md">
-                <ShieldCheck className="h-2.5 w-2.5 text-emerald-600" />
-                Verified
-              </span>
+          </div>
+
+          <div className="mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-primary truncate">
+            <span>{getPropertyTypeName(property.type)}</span>
+            {property.project_name && (
+              <>
+                <span className="text-slate-300 font-normal">•</span>
+                <span className="text-slate-600 font-medium truncate">
+                  {property.project_name}
+                </span>
+              </>
             )}
           </div>
         </div>
 
         {/* Location */}
-        <div className="mb-3 flex items-center gap-1.5 text-xs font-semibold text-slate-700">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-primary" />
+        <div className="mt-1 mb-2.5 flex items-center gap-1.5 text-xs text-slate-600">
+          <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
           <span className="truncate">
             {[property.location?.area, property.location?.city]
               .filter(Boolean)
@@ -185,10 +181,10 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           </span>
         </div>
 
-        {/* Quick Specs Pill Row */}
-        <div className="mb-3.5 grid grid-cols-3 gap-1 rounded-2xl bg-slate-100/90 border border-slate-200/80 p-2 text-center text-xs">
+        {/* Quick Specs Compact Row */}
+        <div className="mb-2.5 grid grid-cols-3 divide-x divide-slate-200/90 rounded-xl bg-slate-50/90 border border-slate-200/80 py-1.5 px-1 text-center text-xs">
           <div className="flex flex-col justify-center px-1">
-            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
+            <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               Area
             </span>
             <span className="font-black text-slate-950 text-xs truncate">
@@ -197,8 +193,8 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
                 : "Plot / Site"}
             </span>
           </div>
-          <div className="flex flex-col justify-center border-x border-slate-300 px-1">
-            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
+          <div className="flex flex-col justify-center px-1">
+            <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               {property.bedrooms ? "Config" : property.facing ? "Facing" : "Category"}
             </span>
             <span className="font-black text-slate-950 text-xs truncate">
@@ -210,7 +206,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
             </span>
           </div>
           <div className="flex flex-col justify-center px-1">
-            <span className="block text-[10px] font-extrabold uppercase tracking-wider text-slate-600">
+            <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-500">
               {property.bathrooms ? "Baths" : "Status"}
             </span>
             <span className="font-black text-slate-950 text-xs truncate capitalize">
@@ -223,37 +219,27 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           </div>
         </div>
 
-        {/* Amenities Badge Tag */}
-        {amenitiesCount > 0 && (
-          <div className="mb-3.5 flex items-center gap-1.5">
-            <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 border border-slate-200/90 px-2 py-0.5 text-[10px] font-bold text-slate-700">
-              <Layers className="h-3 w-3 text-primary" />
-              {amenitiesCount} {amenitiesCount === 1 ? "Amenity" : "Amenities"} Attached
-            </span>
-          </div>
-        )}
-
         {/* Price & Actions Row */}
-        <div className="mt-auto flex items-center justify-between border-t border-slate-200 pt-3">
-          <div>
-            <span className="block text-[10px] font-black uppercase tracking-wider text-slate-500">
-              Valuation
+        <div className="mt-auto flex items-center justify-between border-t border-slate-100 pt-2.5">
+          <div className="min-w-0 pr-2">
+            <span className="block text-[9.5px] font-bold uppercase tracking-wider text-slate-400">
+              Price
             </span>
-            <span className="text-base font-black text-slate-950">
+            <span className="text-sm font-black text-slate-950 truncate block">
               {property.price !== undefined && property.price !== null
                 ? formatIndianCurrency(property.price)
                 : "Price on Request"}
             </span>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 shrink-0">
             {property.status === "draft" && onPublish && (
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8.5 rounded-xl px-2.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 shadow-xs flex items-center gap-1 mr-1"
+                className="h-8 rounded-lg px-2 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-300 shadow-2xs flex items-center gap-1 mr-0.5"
                 onClick={() => onPublish(property)}
-                title="Publish Draft to Live Catalog"
+                title="Publish Draft"
               >
                 <UploadCloud className="h-3.5 w-3.5 text-emerald-600 stroke-[2.5]" />
                 Publish
@@ -262,29 +248,29 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
             <Button
               variant="ghost"
               size="icon"
-              className="h-8.5 w-8.5 rounded-xl text-slate-700 hover:text-slate-950 hover:bg-slate-100"
+              className="h-8 w-8 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100"
               onClick={() => onQuickView(property)}
               title="Quick Preview"
             >
-              <Eye className="h-4 w-4" />
+              <Eye className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8.5 w-8.5 rounded-xl text-slate-700 hover:text-slate-950 hover:bg-slate-100"
+              className="h-8 w-8 rounded-lg text-slate-600 hover:text-slate-950 hover:bg-slate-100"
               onClick={() => onEdit(property)}
               title="Edit Property"
             >
-              <Edit className="h-4 w-4" />
+              <Edit className="h-3.5 w-3.5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="h-8.5 w-8.5 rounded-xl text-rose-600 hover:bg-rose-100"
+              className="h-8 w-8 rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700"
               onClick={() => onDelete(property._id)}
               title="Delete Property"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>
         </div>

@@ -18,6 +18,8 @@ interface PropertyQuickViewDialogProps {
   onEdit: (property: Property) => void;
   getPropertyTypeName: (type: any) => string;
   getAmenityName: (amenityId: string) => string;
+  getAmenityTypeName?: (amenityId: string, typeId: string) => string;
+  allAmenities?: any[];
 }
 
 export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = ({
@@ -28,6 +30,8 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
   onEdit,
   getPropertyTypeName,
   getAmenityName,
+  getAmenityTypeName,
+  allAmenities,
 }) => {
   if (!property) return null;
 
@@ -36,7 +40,7 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
       <DialogContent className="max-h-[92vh] w-[95vw] max-w-3xl overflow-y-auto rounded-3xl p-0 border border-slate-200">
         <div>
           {/* Hero Image / Showcase */}
-          <div className="relative aspect-16/9 w-full bg-slate-950 overflow-hidden">
+          <div className="relative h-56 sm:h-64 md:h-72 w-full bg-slate-950 overflow-hidden">
             <img
               src={
                 property.image_url?.[activeImage] ||
@@ -48,11 +52,9 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
                 (e.currentTarget as HTMLImageElement).src = VILLA_FALLBACKS[0];
               }}
             />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-black/30 pointer-events-none" />
 
-            {/* Subtle vignette gradient */}
-            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/75 via-transparent to-black/35 pointer-events-none" />
-
-            {/* Floating Tags */}
+            {/* Floating Top Badges */}
             <div className="absolute left-4 top-4 flex items-center gap-2 z-20">
               <Badge className="bg-white/95 text-slate-950 font-black border border-slate-200 shadow-md backdrop-blur-sm">
                 For {property.listing_type || "Sale"}
@@ -64,31 +66,26 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
               >
                 {(property.status || "available").replace(/_/g, " ")}
               </span>
-              {!getPropertyCoverInfo(property).isReal && (
-                <Badge className="bg-amber-500/90 text-slate-950 font-black border border-amber-300 shadow-md backdrop-blur-sm">
-                  <Sparkles className="mr-1 h-3 w-3" /> Concept Preview
-                </Badge>
-              )}
             </div>
 
             {/* Close Button */}
             <button
               type="button"
               onClick={onClose}
-              className="absolute right-4 top-4 z-20 flex h-8.5 w-8.5 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm hover:bg-black/90 shadow-md"
+              className="absolute right-4 top-4 z-20 flex h-8.5 w-8.5 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur-sm hover:bg-black/90 shadow-md transition"
             >
               <X className="h-4 w-4 stroke-[3]" />
             </button>
 
             {/* Gallery Thumbnails Overlay */}
             {property.image_url && property.image_url.length > 1 && (
-              <div className="absolute bottom-3.5 left-3.5 right-3.5 z-20 flex items-center gap-2 overflow-x-auto rounded-2xl bg-black/60 p-2 backdrop-blur-md">
+              <div className="absolute bottom-2.5 left-3.5 right-3.5 z-20 flex items-center gap-2 overflow-x-auto rounded-2xl bg-black/60 p-1.5 backdrop-blur-md">
                 {property.image_url.map((img, idx) => (
                   <button
                     key={idx}
                     type="button"
                     onClick={() => setActiveImage(idx)}
-                    className={`relative h-12 w-16 shrink-0 overflow-hidden rounded-xl border-2 transition ${
+                    className={`relative h-10 w-14 shrink-0 overflow-hidden rounded-xl border-2 transition ${
                       activeImage === idx
                         ? "border-primary scale-105"
                         : "border-transparent opacity-70 hover:opacity-100"
@@ -142,7 +139,7 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
                 </p>
               </div>
               <div>
-                <span className="text-[11px] font-black text-slate-600 uppercase tracking-wider">Area Size</span>
+                <span className="text-[11px] font-black text-slate-600 uppercase tracking-wider">Area</span>
                 <p className="text-xs font-black text-slate-950">
                   {property.area_size
                     ? `${property.area_size} ${property.area_unit || "sqft"}`
@@ -199,36 +196,158 @@ export const PropertyQuickViewDialog: React.FC<PropertyQuickViewDialogProps> = (
               </div>
             )}
 
-            {/* Amenities */}
-            {property.amenities_data && property.amenities_data.length > 0 && (
-              <div>
-                <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                  Featured Amenities
-                </h4>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {property.amenities_data.map((item: any, i: number) => {
-                    const amenityId =
-                      typeof item.amenities === "object"
-                        ? item.amenities?._id
-                        : item.amenities;
-                    const amenityName =
-                      typeof item.amenities === "object"
-                        ? item.amenities?.name
-                        : getAmenityName(amenityId);
-                    return (
-                      <Badge
-                        key={i}
-                        variant="secondary"
-                        className="rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 bg-slate-200 border border-slate-300"
-                      >
-                        <Sparkles className="mr-1.5 h-3.5 w-3.5 text-primary stroke-[2.5]" />
-                        {amenityName}
-                      </Badge>
+            {/* Featured Amenities Section */}
+            {property.amenities_data && property.amenities_data.length > 0 && (() => {
+              // Group amenities by category / type name
+              const groupsMap = new Map<string, Set<string>>();
+
+              const isHexId = (str: string) => /^[0-9a-fA-F]{24}$/.test(str);
+
+              const resolveCatName = (catRef: any): string => {
+                if (!catRef) return "";
+                if (typeof catRef === "object" && catRef?.name) return catRef.name.trim();
+                const id = typeof catRef === "string" ? catRef : catRef?._id || catRef?.id;
+                if (!id) return "";
+                let name = getAmenityName ? getAmenityName(id) : "";
+                if (name && name !== id && !isHexId(name)) return name.trim();
+                const matchedAmenity = allAmenities?.find((a) => a._id === id);
+                if (matchedAmenity?.amenities_type?.name) {
+                  return matchedAmenity.amenities_type.name.trim();
+                }
+                return "";
+              };
+
+              const resolveAmenityName = (subRef: any, catId?: string): string => {
+                if (!subRef) return "";
+                if (typeof subRef === "object" && subRef?.name) return subRef.name.trim();
+                const id = typeof subRef === "string" ? subRef : subRef?._id || subRef?.id;
+                if (!id) return "";
+                const matched = allAmenities?.find((a) => a._id === id);
+                if (matched?.name) return matched.name.trim();
+                if (getAmenityTypeName) {
+                  const typeName = getAmenityTypeName(catId || "", id);
+                  if (typeName && typeName !== id && !isHexId(typeName)) return typeName.trim();
+                }
+                if (getAmenityName) {
+                  const aName = getAmenityName(id);
+                  if (aName && aName !== id && !isHexId(aName)) return aName.trim();
+                }
+                return "";
+              };
+
+              property.amenities_data.forEach((item: any) => {
+                if (!item) return;
+
+                const rawTypes = Array.isArray(item.amenity_types)
+                  ? item.amenity_types
+                  : Array.isArray(item.amenities)
+                  ? item.amenities
+                  : [];
+
+                // Case A: Frontend format (item.amenities is category, item.amenity_types is sub-amenities)
+                if (rawTypes.length > 1) {
+                  let categoryName = resolveCatName(item.amenities);
+                  if (!categoryName) categoryName = "General Features";
+
+                  if (!groupsMap.has(categoryName)) {
+                    groupsMap.set(categoryName, new Set<string>());
+                  }
+                  const set = groupsMap.get(categoryName)!;
+
+                  rawTypes.forEach((sub: any) => {
+                    const aName = resolveAmenityName(
+                      sub,
+                      typeof item.amenities === "string" ? item.amenities : item.amenities?._id
                     );
-                  })}
+                    if (aName) set.add(aName);
+                  });
+                  return;
+                }
+
+                // Case B: Backend format (item.amenities is amenity, item.amenity_types is [category])
+                const rawAmenity = item.amenities;
+                const rawCat = rawTypes[0];
+
+                let categoryName = resolveCatName(rawCat);
+                const rawAmenityId = typeof rawAmenity === "object" ? rawAmenity?._id : rawAmenity;
+                const amenityName = resolveAmenityName(
+                  rawAmenity,
+                  typeof rawCat === "string" ? rawCat : rawCat?._id
+                );
+
+                if (!categoryName && rawAmenityId) {
+                  const matched = allAmenities?.find((a) => a._id === rawAmenityId);
+                  if (matched?.amenities_type) {
+                    categoryName = resolveCatName(matched.amenities_type);
+                  }
+                }
+
+                if (!categoryName) categoryName = "General Features";
+
+                if (amenityName) {
+                  if (!groupsMap.has(categoryName)) {
+                    groupsMap.set(categoryName, new Set<string>());
+                  }
+                  groupsMap.get(categoryName)!.add(amenityName);
+                }
+              });
+
+              // Filter out empty groups
+              const validGroups: { category: string; items: string[] }[] = [];
+              groupsMap.forEach((itemsSet, category) => {
+                if (itemsSet.size > 0) {
+                  validGroups.push({
+                    category,
+                    items: Array.from(itemsSet),
+                  });
+                }
+              });
+
+              if (validGroups.length === 0) return null;
+
+              return (
+                <div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-900 mb-3">
+                    Featured Amenities
+                  </h4>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    {validGroups.map((group, gIdx) => (
+                      <div
+                        key={gIdx}
+                        className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-2.5 transition-all hover:bg-slate-50 hover:border-slate-300"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <Sparkles className="h-3.5 w-3.5" />
+                            </div>
+                            <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                              {group.category}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-md">
+                            {group.items.length}
+                          </span>
+                        </div>
+
+                        {/* Badges for Amenities under this category */}
+                        <div className="flex flex-wrap gap-1.5 pt-0.5">
+                          {group.items.map((amenityName, aIdx) => (
+                            <Badge
+                              key={aIdx}
+                              variant="secondary"
+                              className="rounded-lg px-2.5 py-1 text-xs font-bold text-slate-800 bg-white border border-slate-200/90 shadow-2xs hover:bg-slate-100"
+                            >
+                              {amenityName}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Nearby Places */}
             {property.nearby_places && property.nearby_places.length > 0 && (
