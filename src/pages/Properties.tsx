@@ -58,6 +58,7 @@ const Properties = () => {
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
   const [amenities, setAmenities] = useState<Amenity[]>([]);
   const [amenityTypes, setAmenityTypes] = useState<AmenityType[]>([]);
+  const [allAmenities, setAllAmenities] = useState<any[]>([]);
   const [amenityTypeCache, setAmenityTypeCache] = useState<
     Record<string, AmenityType[]>
   >({});
@@ -167,6 +168,36 @@ const Properties = () => {
     }
   };
 
+  const fetchAllAmenities = async () => {
+    try {
+      const response = await axiosInstance.get("/amenities");
+      const result =
+        response?.data?.result || response?.data?.data || response?.data;
+      const list = Array.isArray(result) ? result : [];
+      setAllAmenities(list);
+
+      const cacheByCat: Record<string, AmenityType[]> = {};
+      list.forEach((item: any) => {
+        if (!item?._id || !item?.name) return;
+        const catId =
+          typeof item.amenities_type === "object"
+            ? item.amenities_type?._id || item.amenities_type?.id
+            : item.amenities_type;
+        if (catId) {
+          if (!cacheByCat[catId]) cacheByCat[catId] = [];
+          cacheByCat[catId].push({
+            _id: item._id,
+            name: item.name,
+            amenity_id: catId,
+          });
+        }
+      });
+      setAmenityTypeCache((prev) => ({ ...cacheByCat, ...prev }));
+    } catch (error) {
+      console.error("Failed to fetch all amenities:", error);
+    }
+  };
+
   const fetchAmenityTypes = async (
     amenityId: string,
     updateCurrent = true
@@ -267,6 +298,7 @@ const Properties = () => {
   useEffect(() => {
     fetchPropertyTypes();
     fetchAmenities();
+    fetchAllAmenities();
     fetchPropertyStats();
   }, []);
 
@@ -512,39 +544,144 @@ const Properties = () => {
     }));
   };
 
-  const getAmenityName = (id: string) =>
-    amenities.find((amenity) => amenity._id === id)?.name || id;
+  const getAmenityName = (id: string) => {
+    if (!id) return "";
+    const cat = amenities.find((item) => item._id === id);
+    if (cat?.name) return cat.name;
+    const directAmenity = allAmenities.find((item) => item._id === id);
+    if (directAmenity?.name) return directAmenity.name;
+    for (const catId of Object.keys(amenityTypeCache)) {
+      const found = (amenityTypeCache[catId] || []).find((t) => t._id === id);
+      if (found?.name) return found.name;
+    }
+    return id;
+  };
 
-  const getAmenityTypeName = (amenityId: string, typeId: string) =>
-    (amenityTypeCache[amenityId] || []).find(
-      (type) => type._id === typeId
-    )?.name ||
-    (amenityId === selectedAmenity
-      ? amenityTypes.find((type) => type._id === typeId)?.name
-      : undefined) ||
-    typeId;
+  const getAmenityTypeName = (amenityId: string, typeId: string) => {
+    if (!typeId) return "";
+    if (amenityId && amenityTypeCache[amenityId]) {
+      const found = amenityTypeCache[amenityId].find((type) => type._id === typeId);
+      if (found?.name) return found.name;
+    }
+    if (amenityId === selectedAmenity) {
+      const found = amenityTypes.find((type) => type._id === typeId);
+      if (found?.name) return found.name;
+    }
+    for (const catId of Object.keys(amenityTypeCache)) {
+      const found = (amenityTypeCache[catId] || []).find((type) => type._id === typeId);
+      if (found?.name) return found.name;
+    }
+    const directAmenity = allAmenities.find((item) => item._id === typeId);
+    if (directAmenity?.name) return directAmenity.name;
+    const cat = amenities.find((item) => item._id === typeId);
+    if (cat?.name) return cat.name;
+    return typeId;
+  };
 
   const handleEdit = async (property: Property) => {
     setEditingProperty(property);
 
-    const mappedAmenities: FormAmenityData[] = (property.amenities_data || [])
-      .map((item: any) => {
-        const rawTypes = item?.amenity_types || item?.amenitie_tyep;
-        const typesList = Array.isArray(rawTypes) ? rawTypes : [];
+    const initialCache: Record<string, AmenityType[]> = {};
+    const grouped: Record<string, Set<string>> = {};
 
-        return {
-          amenities:
-            typeof item?.amenities === "string"
-              ? item.amenities
-              : item?.amenities?._id || item?.amemities || "",
-          amenity_types: typesList
-            .map((type: any) =>
-              typeof type === "string" ? type : type?._id
-            )
-            .filter(Boolean),
-        };
-      })
-      .filter((item) => item.amenities);
+    (property.amenities_data || []).forEach((item: any) => {
+      if (!item) return;
+
+      const rawAmenity = item.amenities;
+      const rawAmenityId =
+        typeof rawAmenity === "object"
+          ? rawAmenity?._id || rawAmenity?.id
+          : rawAmenity;
+
+      const rawTypes = Array.isArray(item.amenity_types)
+        ? item.amenity_types
+        : Array.isArray(item.amenities)
+        ? item.amenities
+        : [];
+
+      if (rawTypes.length > 1) {
+        // Frontend grouped legacy format: item.amenities is category, item.amenity_types is array of amenities
+        const catId = rawAmenityId;
+        if (catId) {
+          if (!grouped[catId]) grouped[catId] = new Set();
+          rawTypes.forEach((t: any) => {
+            const id = typeof t === "object" ? t?._id || t?.id : t;
+            if (id) {
+              grouped[catId].add(id);
+              if (typeof t === "object" && t?.name) {
+                if (!initialCache[catId]) initialCache[catId] = [];
+                if (!initialCache[catId].some((c) => c._id === id)) {
+                  initialCache[catId].push({
+                    _id: id,
+                    name: t.name,
+                    amenity_id: catId,
+                  });
+                }
+              }
+            }
+          });
+        }
+      } else if (rawAmenityId) {
+        // Backend format: item.amenities is amenity, item.amenity_types is [category]
+        const firstCat = rawTypes[0];
+        let catId =
+          typeof firstCat === "object"
+            ? firstCat?._id || firstCat?.id
+            : firstCat;
+
+        const matchedAmenity = allAmenities.find(
+          (a) => a._id === rawAmenityId
+        );
+        let amenityId = rawAmenityId;
+
+        if (matchedAmenity) {
+          amenityId = matchedAmenity._id;
+          if (!catId) {
+            catId =
+              typeof matchedAmenity.amenities_type === "object"
+                ? matchedAmenity.amenities_type?._id || matchedAmenity.amenities_type?.id
+                : matchedAmenity.amenities_type;
+          }
+        } else {
+          // If rawAmenityId is actually a category
+          const matchedCat = amenities.find((c) => c._id === rawAmenityId);
+          if (matchedCat) {
+            catId = matchedCat._id;
+            if (rawTypes.length > 0) {
+              if (!grouped[catId]) grouped[catId] = new Set();
+              rawTypes.forEach((t: any) => {
+                const id = typeof t === "object" ? t?._id || t?.id : t;
+                if (id) grouped[catId].add(id);
+              });
+              return;
+            }
+          }
+        }
+
+        if (catId && amenityId) {
+          if (!grouped[catId]) grouped[catId] = new Set();
+          grouped[catId].add(amenityId);
+
+          if (typeof rawAmenity === "object" && rawAmenity?.name) {
+            if (!initialCache[catId]) initialCache[catId] = [];
+            if (!initialCache[catId].some((c) => c._id === amenityId)) {
+              initialCache[catId].push({
+                _id: amenityId,
+                name: rawAmenity.name,
+                amenity_id: catId,
+              });
+            }
+          }
+        }
+      }
+    });
+
+    const mappedAmenities: FormAmenityData[] = Object.keys(grouped)
+      .map((catId) => ({
+        amenities: catId,
+        amenity_types: Array.from(grouped[catId]),
+      }))
+      .filter((item) => item.amenities && item.amenity_types.length > 0);
 
     const possessionDate = property?.possession_date
       ? new Date(property.possession_date).toISOString().split("T")[0]
@@ -604,7 +741,7 @@ const Properties = () => {
       isVerified: Boolean(property.isVerified),
     });
 
-    setAmenityTypeCache({});
+    setAmenityTypeCache(initialCache);
     setSelectedAmenity("");
     setSelectedAmenityTypes([]);
     setAmenityTypes([]);
@@ -763,6 +900,30 @@ const Properties = () => {
       const toNum = (v: string) =>
         v === "" ? undefined : Number(v);
 
+      // Merge any pending amenities selection from dropdowns
+      let combinedAmenities = [...formData.amenities_data];
+      if (selectedAmenity && selectedAmenityTypes.length > 0) {
+        const existIdx = combinedAmenities.findIndex(
+          (a) => a.amenities === selectedAmenity
+        );
+        if (existIdx > -1) {
+          combinedAmenities[existIdx] = {
+            amenities: selectedAmenity,
+            amenity_types: Array.from(
+              new Set([
+                ...combinedAmenities[existIdx].amenity_types,
+                ...selectedAmenityTypes,
+              ])
+            ),
+          };
+        } else {
+          combinedAmenities.push({
+            amenities: selectedAmenity,
+            amenity_types: selectedAmenityTypes,
+          });
+        }
+      }
+
       const propertyData: any = {
         name: formData.name.trim(),
         type: formData.type,
@@ -815,16 +976,23 @@ const Properties = () => {
             ? String(formData.parking)
             : undefined
           : undefined,
-        amenities_data: formData.amenities_data
-          .filter(
-            (item) => item.amenities && item.amenities.trim() !== ""
-          )
-          .map((item) => ({
-            amenities: item.amenities,
-            amenity_types: Array.isArray(item.amenity_types)
-              ? item.amenity_types.filter(Boolean)
-              : [],
-          })),
+        amenities_data: (() => {
+          const backendList: { amenities: string; amenity_types: string[] }[] = [];
+          combinedAmenities.forEach((group) => {
+            const catId = typeof group.amenities === "string" ? group.amenities : (group.amenities as any)?._id;
+            const subList = Array.isArray(group.amenity_types) ? group.amenity_types : [];
+            subList.forEach((sub: any) => {
+              const amenityId = typeof sub === "string" ? sub : sub?._id || sub?.id;
+              if (amenityId) {
+                backendList.push({
+                  amenities: amenityId,
+                  amenity_types: catId ? [catId] : [],
+                });
+              }
+            });
+          });
+          return backendList;
+        })(),
         nearby_places: formData.nearby_places
           .filter((p) => p.name && p.name.trim() !== "")
           .map((p) => ({
@@ -914,6 +1082,30 @@ const Properties = () => {
           ? editingProperty.name
           : "Untitled Draft");
 
+      // Merge any pending amenities selection from dropdowns
+      let combinedAmenities = [...formData.amenities_data];
+      if (selectedAmenity && selectedAmenityTypes.length > 0) {
+        const existIdx = combinedAmenities.findIndex(
+          (a) => a.amenities === selectedAmenity
+        );
+        if (existIdx > -1) {
+          combinedAmenities[existIdx] = {
+            amenities: selectedAmenity,
+            amenity_types: Array.from(
+              new Set([
+                ...combinedAmenities[existIdx].amenity_types,
+                ...selectedAmenityTypes,
+              ])
+            ),
+          };
+        } else {
+          combinedAmenities.push({
+            amenities: selectedAmenity,
+            amenity_types: selectedAmenityTypes,
+          });
+        }
+      }
+
       const draftData: any = {
         name: draftName,
         type: formData.type || undefined,
@@ -966,16 +1158,23 @@ const Properties = () => {
             ? String(formData.parking)
             : undefined
           : undefined,
-        amenities_data: formData.amenities_data
-          .filter(
-            (item) => item.amenities && item.amenities.trim() !== ""
-          )
-          .map((item) => ({
-            amenities: item.amenities,
-            amenity_types: Array.isArray(item.amenity_types)
-              ? item.amenity_types.filter(Boolean)
-              : [],
-          })),
+        amenities_data: (() => {
+          const backendList: { amenities: string; amenity_types: string[] }[] = [];
+          combinedAmenities.forEach((group) => {
+            const catId = typeof group.amenities === "string" ? group.amenities : (group.amenities as any)?._id;
+            const subList = Array.isArray(group.amenity_types) ? group.amenity_types : [];
+            subList.forEach((sub: any) => {
+              const amenityId = typeof sub === "string" ? sub : sub?._id || sub?.id;
+              if (amenityId) {
+                backendList.push({
+                  amenities: amenityId,
+                  amenity_types: catId ? [catId] : [],
+                });
+              }
+            });
+          });
+          return backendList;
+        })(),
         nearby_places: formData.nearby_places
           .filter((p) => p.name && p.name.trim() !== "")
           .map((p) => ({
@@ -1519,6 +1718,12 @@ const Properties = () => {
               onQuickView={(p) => {
                 setQuickViewProperty(p);
                 setQuickViewActiveImage(0);
+                (p.amenities_data || []).forEach((item: any) => {
+                  const catId = typeof item.amenities === "string" ? item.amenities : item.amenities?._id || item.amenities_type?._id || item.amenities_type;
+                  if (catId && !amenityTypeCache[catId]) {
+                    fetchAmenityTypes(catId, false);
+                  }
+                });
               }}
               onEdit={handleEdit}
               onDelete={setDeleteId}
@@ -1536,6 +1741,12 @@ const Properties = () => {
           onQuickView={(p) => {
             setQuickViewProperty(p);
             setQuickViewActiveImage(0);
+            (p.amenities_data || []).forEach((item: any) => {
+              const catId = typeof item.amenities === "string" ? item.amenities : item.amenities?._id || item.amenities_type?._id || item.amenities_type;
+              if (catId && !amenityTypeCache[catId]) {
+                fetchAmenityTypes(catId, false);
+              }
+            });
           }}
           onEdit={handleEdit}
           onDelete={setDeleteId}
@@ -1599,6 +1810,8 @@ const Properties = () => {
         onEdit={handleEdit}
         getPropertyTypeName={getPropertyTypeName}
         getAmenityName={getAmenityName}
+        getAmenityTypeName={getAmenityTypeName}
+        allAmenities={allAmenities}
       />
 
       <AmenityDetailsDialog

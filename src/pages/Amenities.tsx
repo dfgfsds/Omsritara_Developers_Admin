@@ -111,10 +111,10 @@ function Amenities() {
   // API URLS
   // ==========================================
 
-  const AMENITIES_API = "http://localhost:5000/amenities";
+  const AMENITIES_API = "http://localhost:9000/amenities";
 
   const AMENITIES_TYPE_API =
-    "http://localhost:5000/amenitiestype";
+    "http://localhost:9000/amenitiestype";
 
   // ==========================================
   // GET ALL AMENITIES
@@ -379,11 +379,23 @@ function Amenities() {
       item.name || ""
     );
 
-    // IMPORTANT:
-    // Backend populated amenities_type
-    setType(
-      item.amenities_type?._id || ""
-    );
+    // Properly extract amenities_type whether populated as object or returned as string ID
+    const typeId =
+      typeof item.amenities_type === "object" && item.amenities_type !== null
+        ? item.amenities_type?._id || (item.amenities_type as any)?.id || ""
+        : typeof item.amenities_type === "string"
+        ? item.amenities_type
+        : typeof (item as any).amenitiestype === "object" && (item as any).amenitiestype !== null
+        ? (item as any).amenitiestype?._id || (item as any).amenitiestype?.id || ""
+        : typeof (item as any).amenitiestype === "string"
+        ? (item as any).amenitiestype
+        : typeof (item as any).amenity_type === "object" && (item as any).amenity_type !== null
+        ? (item as any).amenity_type?._id || (item as any).amenity_type?.id || ""
+        : typeof (item as any).amenity_type === "string"
+        ? (item as any).amenity_type
+        : "";
+
+    setType(typeId);
 
     setDescription(
       item.description || ""
@@ -790,7 +802,15 @@ function Amenities() {
                           text-slate-600
                         "
                       >
-                        {item.amenities_type?.name || "-"}
+                        {typeof item.amenities_type === "object" && item.amenities_type !== null
+                          ? item.amenities_type?.name || "-"
+                          : amenityTypes.find(
+                              (t) =>
+                                (t._id || t.id) ===
+                                (item.amenities_type ||
+                                  (item as any).amenitiestype ||
+                                  (item as any).amenity_type)
+                            )?.name || (typeof item.amenities_type === "string" ? item.amenities_type : "-")}
                       </td>
 
                       {/* DESCRIPTION */}

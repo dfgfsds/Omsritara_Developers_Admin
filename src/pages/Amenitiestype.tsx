@@ -26,7 +26,7 @@ function Amenitiestype() {
   // Modal
   const [showModal, setShowModal] = useState(false);
 
-  const API_URL = "http://localhost:5000/amenitiestype";
+  const API_URL = "http://localhost:9000/amenitiestype";
 
   // ==========================================
   // GET ALL AMENITIES TYPES
@@ -807,8 +807,8 @@ function Amenitiestype() {
                   {submitting
                     ? "Saving..."
                     : editingId
-                    ? "Update"
-                    : "Save"}
+                      ? "Update"
+                      : "Save"}
                 </button>
 
               </div>
