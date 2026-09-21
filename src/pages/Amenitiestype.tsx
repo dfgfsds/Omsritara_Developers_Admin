@@ -27,6 +27,8 @@ function Amenitiestype() {
   // Modal
   const [showModal, setShowModal] = useState(false);
 
+  const API_URL = "https://api.omsritaradevelopers.in/amenitiestype";
+
   // ==========================================
   // GET ALL AMENITIES TYPES
   // ==========================================
@@ -806,8 +808,8 @@ function Amenitiestype() {
                   {submitting
                     ? "Saving..."
                     : editingId
-                    ? "Update"
-                    : "Save"}
+                      ? "Update"
+                      : "Save"}
                 </button>
 
               </div>
