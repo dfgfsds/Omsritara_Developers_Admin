@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import axiosInstance from "@/lib/axiosInstance";
 import {
@@ -8,6 +8,8 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Sparkles,
+  CloudOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +33,15 @@ import { PropertyQuickViewDialog } from "@/components/properties/PropertyQuickVi
 import { PropertyDeleteDialog } from "@/components/properties/PropertyDeleteDialog";
 import { AmenityDetailsDialog } from "@/components/properties/AmenityDetailsDialog";
 import { PropertyFormDialog } from "@/components/properties/form/PropertyFormDialog";
+import {
+  saveLocalDraft,
+  getLocalDraft,
+  removeLocalDraft,
+  getLatestActiveDraft,
+  formatDraftTime,
+  isFormDirtyOrHasContent,
+  StoredPropertyDraft,
+} from "@/utils/propertyDraftStorage";
 
 const propertyStatusCycle: Record<
   string,
@@ -80,6 +91,17 @@ const Properties = () => {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
   const [open, setOpen] = useState(false);
 
+  // Auto-save & Draft Recovery state
+  const [autoSaveStatus, setAutoSaveStatus] = useState<
+    "saved" | "saving" | "local" | "idle"
+  >("idle");
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isRestoredDraft, setIsRestoredDraft] = useState(false);
+  const [pendingGlobalDraft, setPendingGlobalDraft] =
+    useState<StoredPropertyDraft | null>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const initialFormDataRef = useRef<PropertyFormData>(emptyFormData);
+
   const [quickViewProperty, setQuickViewProperty] =
     useState<Property | null>(null);
   const [quickViewActiveImage, setQuickViewActiveImage] = useState(0);
@@ -119,8 +141,32 @@ const Properties = () => {
   };
 
   const getErrorMessage = (error: any, fallback: string) => {
+    // 1. Joi validation error details array: msg.details[0].message
+    if (
+      Array.isArray(error?.response?.data?.msg?.details) &&
+      error.response.data.msg.details.length > 0
+    ) {
+      return error.response.data.msg.details
+        .map((d: any) => d.message)
+        .join(", ");
+    }
+    // 2. Direct details array
+    if (
+      Array.isArray(error?.response?.data?.details) &&
+      error.response.data.details.length > 0
+    ) {
+      return error.response.data.details
+        .map((d: any) => d.message)
+        .join(", ");
+    }
+    // 3. String msg
+    if (typeof error?.response?.data?.msg === "string") {
+      return error.response.data.msg;
+    }
+    // 4. String message
     if (typeof error?.response?.data?.message === "string")
       return error.response.data.message;
+    // 5. String error
     if (typeof error?.response?.data?.error === "string")
       return error.response.data.error;
     if (typeof error?.message === "string") return error.message;
@@ -321,10 +367,14 @@ const Properties = () => {
       amenities_data: [],
       nearby_places: [],
     });
+    initialFormDataRef.current = emptyFormData;
     setFormActiveTab("basic");
     resetAmenitySelector();
     setAmenityTypeCache({});
     setEditingProperty(null);
+    setIsRestoredDraft(false);
+    setAutoSaveStatus("idle");
+    setLastSavedTime(null);
   };
 
   const handleInputChange = (
@@ -578,7 +628,378 @@ const Properties = () => {
     return typeId;
   };
 
+  const hasUnsavedChanges = useMemo(() => {
+    if (!open) return false;
+    return isFormDirtyOrHasContent(
+      formData,
+      editingProperty ? initialFormDataRef.current : null
+    );
+  }, [open, formData, editingProperty]);
+
+  const buildDraftDataPayload = () => {
+    const toNum = (v: any) =>
+      v === "" || v === undefined || v === null || isNaN(Number(v))
+        ? undefined
+        : Number(v);
+
+    const draftName =
+      formData.name.trim() ||
+      (editingProperty?.name ? editingProperty.name : "Untitled Draft");
+
+    let combinedAmenities = [...formData.amenities_data];
+    if (selectedAmenity && selectedAmenityTypes.length > 0) {
+      const existIdx = combinedAmenities.findIndex(
+        (a) => a.amenities === selectedAmenity
+      );
+      if (existIdx > -1) {
+        combinedAmenities[existIdx] = {
+          amenities: selectedAmenity,
+          amenity_types: Array.from(
+            new Set([
+              ...combinedAmenities[existIdx].amenity_types,
+              ...selectedAmenityTypes,
+            ])
+          ),
+        };
+      } else {
+        combinedAmenities.push({
+          amenities: selectedAmenity,
+          amenity_types: selectedAmenityTypes,
+        });
+      }
+    }
+
+    const draftData: any = {
+      name: draftName,
+      type: formData.type || undefined,
+      listing_type: formData.listing_type || undefined,
+      description: formData.description || undefined,
+      location: {
+        address: formData.address || undefined,
+        area: formData.area || undefined,
+        city: formData.city || undefined,
+        state: formData.state || undefined,
+        country: formData.country || undefined,
+        pincode: formData.pincode || undefined,
+      },
+      area_size: toNum(formData.area_size),
+      area_unit: formData.area_unit,
+      price: toNum(formData.price),
+      price_per_sqft: toNum(formData.price_per_sqft),
+      bedrooms: propertyTypeFields.bedrooms
+        ? toNum(formData.bedrooms)
+        : undefined,
+      bathrooms: propertyTypeFields.bathrooms
+        ? toNum(formData.bathrooms)
+        : undefined,
+      balconies: propertyTypeFields.balconies
+        ? toNum(formData.balconies)
+        : undefined,
+      floor_number: propertyTypeFields.floor_number
+        ? toNum(formData.floor_number)
+        : undefined,
+      total_floors: propertyTypeFields.total_floors
+        ? toNum(formData.total_floors)
+        : undefined,
+      furnishing:
+        propertyTypeFields.furnishing &&
+        formData.furnishing &&
+        formData.furnishing.trim() !== ""
+          ? formData.furnishing.trim()
+          : undefined,
+      facing:
+        propertyTypeFields.facing &&
+        formData.facing &&
+        formData.facing.trim() !== ""
+          ? formData.facing.trim()
+          : undefined,
+      construction_status:
+        propertyTypeFields.construction_status &&
+        formData.construction_status &&
+        formData.construction_status.trim() !== ""
+          ? formData.construction_status.trim()
+          : undefined,
+      possession_date:
+        propertyTypeFields.possession_date &&
+        formData.possession_date &&
+        formData.possession_date.trim() !== ""
+          ? formData.possession_date.trim()
+          : undefined,
+      property_age: propertyTypeFields.property_age
+        ? toNum(formData.property_age)
+        : undefined,
+      parking:
+        propertyTypeFields.parking &&
+        formData.parking &&
+        !isNaN(Number(formData.parking))
+          ? Number(formData.parking)
+          : undefined,
+      amenities_data: (() => {
+        const backendList: { amenities: string; amenity_types: string[] }[] = [];
+        combinedAmenities.forEach((group) => {
+          const catId =
+            typeof group.amenities === "string"
+              ? group.amenities.trim()
+              : (group.amenities as any)?._id || "";
+          const subList = Array.isArray(group.amenity_types)
+            ? group.amenity_types
+            : [];
+          subList.forEach((sub: any) => {
+            const amenityId =
+              typeof sub === "string" ? sub : sub?._id || sub?.id;
+            if (
+              amenityId &&
+              typeof amenityId === "string" &&
+              amenityId.trim() !== ""
+            ) {
+              backendList.push({
+                amenities: amenityId.trim(),
+                amenity_types: catId ? [catId] : [],
+              });
+            }
+          });
+        });
+        return backendList;
+      })(),
+      nearby_places: (formData.nearby_places || [])
+        .filter((p) => p && p.name && p.name.trim() !== "")
+        .map((p) => ({
+          name: p.name.trim(),
+          type: p.type || "Landmark",
+          distance:
+            p.distance !== "" && p.distance !== null && p.distance !== undefined && !isNaN(Number(p.distance))
+              ? Number(p.distance)
+              : undefined,
+          distance_unit: p.distance_unit || "km",
+        })),
+      image_url: Array.isArray(formData.image_url) ? formData.image_url : [],
+      map_url:
+        formData.map_url && formData.map_url.trim().startsWith("http")
+          ? formData.map_url.trim()
+          : undefined,
+      media_url:
+        formData.media_url && formData.media_url.trim().startsWith("http")
+          ? formData.media_url.trim()
+          : undefined,
+      pincode: formData.pincode || undefined,
+      owner_name: formData.owner_name || undefined,
+      developer_name: formData.developer_name || undefined,
+      project_name: formData.project_name || undefined,
+      status: "draft",
+      isFeatured: formData.isFeatured,
+      isVerified: formData.isVerified,
+    };
+
+    return draftData;
+  };
+
+  // Real-time Local Storage Auto-Save (800ms debounce)
+  useEffect(() => {
+    if (!open) return;
+    if (!hasUnsavedChanges) return;
+
+    const draftId = editingProperty?._id || "new";
+    const timer = setTimeout(() => {
+      const saved = saveLocalDraft(draftId, {
+        propertyId: editingProperty?._id || null,
+        editingProperty,
+        formData,
+        formActiveTab,
+        name: formData.name,
+      });
+
+      if (saved) {
+        setLastSavedTime(formatDraftTime(saved.timestamp));
+        if (!navigator.onLine) {
+          setAutoSaveStatus("local");
+        } else if (autoSaveStatus !== "saving") {
+          setAutoSaveStatus("saved");
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [open, formData, formActiveTab, editingProperty, hasUnsavedChanges]);
+
+  // Background Server Auto-Sync (3500ms debounce) for new properties or existing drafts
+  useEffect(() => {
+    if (!open) return;
+    if (!hasUnsavedChanges) return;
+    if (!navigator.onLine) return;
+    // Do not downgrade a live property to draft on backend automatically
+    if (editingProperty && editingProperty.status !== "draft") return;
+    // Require minimal content before syncing to backend
+    if (!formData.name?.trim() && !formData.type) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        setAutoSaveStatus("saving");
+        const draftPayload = buildDraftDataPayload();
+
+        if (editingProperty?._id) {
+          await axiosInstance.put(
+            `/property/${editingProperty._id}`,
+            draftPayload
+          );
+          setAutoSaveStatus("saved");
+          setLastSavedTime(formatDraftTime(Date.now()));
+        } else {
+          const response = await axiosInstance.post("/property", draftPayload);
+          const created =
+            response?.data?.result ||
+            response?.data?.data ||
+            response?.data;
+          if (created?._id) {
+            setEditingProperty(created);
+            removeLocalDraft("new");
+            saveLocalDraft(created._id, {
+              propertyId: created._id,
+              editingProperty: created,
+              formData,
+              formActiveTab,
+              name: formData.name,
+            });
+          }
+          setAutoSaveStatus("saved");
+          setLastSavedTime(formatDraftTime(Date.now()));
+          fetchPropertyStats();
+        }
+      } catch (err) {
+        console.warn("Silent server draft sync failed, saved locally:", err);
+        setAutoSaveStatus("local");
+      }
+    }, 3500);
+
+    return () => clearTimeout(timer);
+  }, [open, formData, formActiveTab, editingProperty, hasUnsavedChanges]);
+
+  // Check for pending active draft when outside the dialog
+  useEffect(() => {
+    const checkPendingDraft = () => {
+      if (open) return;
+      const latest = getLatestActiveDraft();
+      if (latest && isFormDirtyOrHasContent(latest.formData)) {
+        setPendingGlobalDraft(latest);
+      } else {
+        setPendingGlobalDraft(null);
+      }
+    };
+
+    checkPendingDraft();
+    window.addEventListener("focus", checkPendingDraft);
+    return () => window.removeEventListener("focus", checkPendingDraft);
+  }, [open]);
+
+  // Online / Offline & BeforeUnload listeners
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (open && hasUnsavedChanges) {
+        setAutoSaveStatus("saved");
+      }
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      if (open) setAutoSaveStatus("local");
+    };
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (open && hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+        return "";
+      }
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [open, hasUnsavedChanges]);
+
+  // Resumes an unsaved draft
+  const resumeDraft = async (draft: StoredPropertyDraft) => {
+    const sanitizedNearbyPlaces = Array.isArray(draft.formData?.nearby_places)
+      ? draft.formData.nearby_places.map((place: any) => ({
+          name: place.name || "",
+          type: place.type || "",
+          distance: str(place.distance),
+          distance_unit: place.distance_unit || "km",
+        }))
+      : [];
+
+    setFormData({
+      ...draft.formData,
+      nearby_places: sanitizedNearbyPlaces,
+    });
+    setFormActiveTab(draft.formActiveTab || "basic");
+    setEditingProperty(draft.editingProperty);
+    setIsRestoredDraft(true);
+    setLastSavedTime(formatDraftTime(draft.timestamp));
+    setAutoSaveStatus(navigator.onLine ? "saved" : "local");
+    initialFormDataRef.current = draft.editingProperty
+      ? { ...draft.formData }
+      : emptyFormData;
+    setPendingGlobalDraft(null);
+
+    // Warm cache for any amenities in the draft
+    if (Array.isArray(draft.formData.amenities_data)) {
+      await Promise.all(
+        draft.formData.amenities_data.map((item) =>
+          fetchAmenityTypes(item.amenities, false)
+        )
+      );
+    }
+
+    setOpen(true);
+  };
+
+  // Discards active restored draft and starts clean
+  const handleDiscardDraft = () => {
+    const draftId = editingProperty?._id || "new";
+    removeLocalDraft(draftId);
+    setIsRestoredDraft(false);
+    setLastSavedTime(null);
+    setAutoSaveStatus("idle");
+    if (editingProperty) {
+      handleEdit(editingProperty);
+    } else {
+      resetForm();
+    }
+    if (pendingGlobalDraft?.draftId === draftId) {
+      setPendingGlobalDraft(null);
+    }
+  };
+
+  // Opens form for new property, restoring unsaved draft if found
+  const handleAddNewProperty = async () => {
+    const existingNewDraft = getLocalDraft("new");
+    if (
+      existingNewDraft &&
+      isFormDirtyOrHasContent(existingNewDraft.formData)
+    ) {
+      await resumeDraft(existingNewDraft);
+    } else {
+      resetForm();
+      setIsRestoredDraft(false);
+      setLastSavedTime(null);
+      setAutoSaveStatus("idle");
+      initialFormDataRef.current = emptyFormData;
+      setOpen(true);
+    }
+  };
+
   const handleEdit = async (property: Property) => {
+    // Check if user has an unsaved local draft for this specific property
+    const existingDraft = getLocalDraft(property._id);
+    if (existingDraft && isFormDirtyOrHasContent(existingDraft.formData)) {
+      await resumeDraft(existingDraft);
+      return;
+    }
+
     setEditingProperty(property);
 
     const initialCache: Record<string, AmenityType[]> = {};
@@ -690,7 +1111,7 @@ const Properties = () => {
     const str = (v: any) =>
       v !== undefined && v !== null ? String(v) : "";
 
-    setFormData({
+    const initialData: PropertyFormData = {
       name: property.name || "",
       type:
         typeof property.type === "string"
@@ -739,7 +1160,13 @@ const Properties = () => {
       status: property.status || "available",
       isFeatured: Boolean(property.isFeatured),
       isVerified: Boolean(property.isVerified),
-    });
+    };
+
+    setFormData(initialData);
+    initialFormDataRef.current = initialData;
+    setIsRestoredDraft(false);
+    setAutoSaveStatus("idle");
+    setLastSavedTime(null);
 
     setAmenityTypeCache(initialCache);
     setSelectedAmenity("");
@@ -897,8 +1324,8 @@ const Properties = () => {
     try {
       setLoading(true);
 
-      const toNum = (v: string) =>
-        v === "" ? undefined : Number(v);
+      const toNum = (v: any) =>
+        v === "" || v === undefined || v === null || isNaN(Number(v)) ? undefined : Number(v);
 
       // Merge any pending amenities selection from dropdowns
       let combinedAmenities = [...formData.amenities_data];
@@ -927,18 +1354,18 @@ const Properties = () => {
       const propertyData: any = {
         name: formData.name.trim(),
         type: formData.type,
-        listing_type: formData.listing_type,
-        description: formData.description,
+        listing_type: formData.listing_type || "sale",
+        description: formData.description || "",
         location: {
-          address: formData.address,
-          area: formData.area,
-          city: formData.city,
-          state: formData.state,
-          country: formData.country,
-          pincode: formData.pincode,
+          address: formData.address || "",
+          area: formData.area || "",
+          city: formData.city.trim(),
+          state: formData.state || "",
+          country: formData.country || "India",
+          pincode: formData.pincode || "",
         },
         area_size: toNum(formData.area_size),
-        area_unit: formData.area_unit,
+        area_unit: formData.area_unit || "sqft",
         price: toNum(formData.price),
         price_per_sqft: toNum(formData.price_per_sqft),
         bedrooms: propertyTypeFields.bedrooms
@@ -956,36 +1383,34 @@ const Properties = () => {
         total_floors: propertyTypeFields.total_floors
           ? toNum(formData.total_floors)
           : undefined,
-        furnishing: propertyTypeFields.furnishing
-          ? formData.furnishing || undefined
+        furnishing: propertyTypeFields.furnishing && formData.furnishing && formData.furnishing.trim() !== ""
+          ? formData.furnishing.trim()
           : undefined,
-        facing: propertyTypeFields.facing
-          ? formData.facing || undefined
+        facing: propertyTypeFields.facing && formData.facing && formData.facing.trim() !== ""
+          ? formData.facing.trim()
           : undefined,
-        construction_status: propertyTypeFields.construction_status
-          ? formData.construction_status || undefined
+        construction_status: propertyTypeFields.construction_status && formData.construction_status && formData.construction_status.trim() !== ""
+          ? formData.construction_status.trim()
           : undefined,
-        possession_date: propertyTypeFields.possession_date
-          ? formData.possession_date || undefined
+        possession_date: propertyTypeFields.possession_date && formData.possession_date && formData.possession_date.trim() !== ""
+          ? formData.possession_date.trim()
           : undefined,
         property_age: propertyTypeFields.property_age
           ? toNum(formData.property_age)
           : undefined,
-        parking: propertyTypeFields.parking
-          ? formData.parking
-            ? String(formData.parking)
-            : undefined
+        parking: propertyTypeFields.parking && formData.parking && !isNaN(Number(formData.parking))
+          ? Number(formData.parking)
           : undefined,
         amenities_data: (() => {
           const backendList: { amenities: string; amenity_types: string[] }[] = [];
           combinedAmenities.forEach((group) => {
-            const catId = typeof group.amenities === "string" ? group.amenities : (group.amenities as any)?._id;
+            const catId = typeof group.amenities === "string" ? group.amenities.trim() : (group.amenities as any)?._id || "";
             const subList = Array.isArray(group.amenity_types) ? group.amenity_types : [];
             subList.forEach((sub: any) => {
               const amenityId = typeof sub === "string" ? sub : sub?._id || sub?.id;
-              if (amenityId) {
+              if (amenityId && typeof amenityId === "string" && amenityId.trim() !== "") {
                 backendList.push({
-                  amenities: amenityId,
+                  amenities: amenityId.trim(),
                   amenity_types: catId ? [catId] : [],
                 });
               }
@@ -993,25 +1418,25 @@ const Properties = () => {
           });
           return backendList;
         })(),
-        nearby_places: formData.nearby_places
-          .filter((p) => p.name && p.name.trim() !== "")
+        nearby_places: (formData.nearby_places || [])
+          .filter((p) => p && p.name && p.name.trim() !== "")
           .map((p) => ({
             name: p.name.trim(),
             type: p.type || "Landmark",
             distance:
-              p.distance !== "" && !isNaN(Number(p.distance))
+              p.distance !== "" && p.distance !== null && p.distance !== undefined && !isNaN(Number(p.distance))
                 ? Number(p.distance)
-                : p.distance || "",
+                : undefined,
             distance_unit: p.distance_unit || "km",
           })),
-        image_url: formData.image_url,
-        map_url: formData.map_url,
-        media_url: formData.media_url,
-        pincode: formData.pincode,
-        owner_name: formData.owner_name,
-        developer_name: formData.developer_name,
-        project_name: formData.project_name,
-        status: formData.status,
+        image_url: Array.isArray(formData.image_url) ? formData.image_url : [],
+        map_url: formData.map_url && formData.map_url.trim().startsWith("http") ? formData.map_url.trim() : undefined,
+        media_url: formData.media_url && formData.media_url.trim().startsWith("http") ? formData.media_url.trim() : undefined,
+        pincode: formData.pincode || undefined,
+        owner_name: formData.owner_name || undefined,
+        developer_name: formData.developer_name || undefined,
+        project_name: formData.project_name || undefined,
+        status: formData.status || "available",
         isFeatured: formData.isFeatured,
         isVerified: formData.isVerified,
       };
@@ -1022,6 +1447,9 @@ const Properties = () => {
             `/property/${editingProperty._id}/publish`,
             propertyData
           );
+          removeLocalDraft(editingProperty._id);
+          setIsRestoredDraft(false);
+          setPendingGlobalDraft(null);
           setOpen(false);
           resetForm();
           showMessage(
@@ -1034,6 +1462,9 @@ const Properties = () => {
             `/property/${editingProperty._id}`,
             propertyData
           );
+          removeLocalDraft(editingProperty._id);
+          setIsRestoredDraft(false);
+          setPendingGlobalDraft(null);
           setOpen(false);
           resetForm();
           showMessage(
@@ -1044,6 +1475,9 @@ const Properties = () => {
         }
       } else {
         await axiosInstance.post("/property", propertyData);
+        removeLocalDraft("new");
+        setIsRestoredDraft(false);
+        setPendingGlobalDraft(null);
         setOpen(false);
         resetForm();
         showMessage(
@@ -1072,137 +1506,16 @@ const Properties = () => {
   const handleSaveDraft = async () => {
     try {
       setLoading(true);
-
-      const toNum = (v: string) =>
-        v === "" ? undefined : Number(v);
-
-      const draftName =
-        formData.name.trim() ||
-        (editingProperty?.name
-          ? editingProperty.name
-          : "Untitled Draft");
-
-      // Merge any pending amenities selection from dropdowns
-      let combinedAmenities = [...formData.amenities_data];
-      if (selectedAmenity && selectedAmenityTypes.length > 0) {
-        const existIdx = combinedAmenities.findIndex(
-          (a) => a.amenities === selectedAmenity
-        );
-        if (existIdx > -1) {
-          combinedAmenities[existIdx] = {
-            amenities: selectedAmenity,
-            amenity_types: Array.from(
-              new Set([
-                ...combinedAmenities[existIdx].amenity_types,
-                ...selectedAmenityTypes,
-              ])
-            ),
-          };
-        } else {
-          combinedAmenities.push({
-            amenities: selectedAmenity,
-            amenity_types: selectedAmenityTypes,
-          });
-        }
-      }
-
-      const draftData: any = {
-        name: draftName,
-        type: formData.type || undefined,
-        listing_type: formData.listing_type || undefined,
-        description: formData.description || undefined,
-        location: {
-          address: formData.address || undefined,
-          area: formData.area || undefined,
-          city: formData.city || undefined,
-          state: formData.state || undefined,
-          country: formData.country || undefined,
-          pincode: formData.pincode || undefined,
-        },
-        area_size: toNum(formData.area_size),
-        area_unit: formData.area_unit,
-        price: toNum(formData.price),
-        price_per_sqft: toNum(formData.price_per_sqft),
-        bedrooms: propertyTypeFields.bedrooms
-          ? toNum(formData.bedrooms)
-          : undefined,
-        bathrooms: propertyTypeFields.bathrooms
-          ? toNum(formData.bathrooms)
-          : undefined,
-        balconies: propertyTypeFields.balconies
-          ? toNum(formData.balconies)
-          : undefined,
-        floor_number: propertyTypeFields.floor_number
-          ? toNum(formData.floor_number)
-          : undefined,
-        total_floors: propertyTypeFields.total_floors
-          ? toNum(formData.total_floors)
-          : undefined,
-        furnishing: propertyTypeFields.furnishing
-          ? formData.furnishing || undefined
-          : undefined,
-        facing: propertyTypeFields.facing
-          ? formData.facing || undefined
-          : undefined,
-        construction_status: propertyTypeFields.construction_status
-          ? formData.construction_status || undefined
-          : undefined,
-        possession_date: propertyTypeFields.possession_date
-          ? formData.possession_date || undefined
-          : undefined,
-        property_age: propertyTypeFields.property_age
-          ? toNum(formData.property_age)
-          : undefined,
-        parking: propertyTypeFields.parking
-          ? formData.parking
-            ? String(formData.parking)
-            : undefined
-          : undefined,
-        amenities_data: (() => {
-          const backendList: { amenities: string; amenity_types: string[] }[] = [];
-          combinedAmenities.forEach((group) => {
-            const catId = typeof group.amenities === "string" ? group.amenities : (group.amenities as any)?._id;
-            const subList = Array.isArray(group.amenity_types) ? group.amenity_types : [];
-            subList.forEach((sub: any) => {
-              const amenityId = typeof sub === "string" ? sub : sub?._id || sub?.id;
-              if (amenityId) {
-                backendList.push({
-                  amenities: amenityId,
-                  amenity_types: catId ? [catId] : [],
-                });
-              }
-            });
-          });
-          return backendList;
-        })(),
-        nearby_places: formData.nearby_places
-          .filter((p) => p.name && p.name.trim() !== "")
-          .map((p) => ({
-            name: p.name.trim(),
-            type: p.type || "Landmark",
-            distance:
-              p.distance !== "" && !isNaN(Number(p.distance))
-                ? Number(p.distance)
-                : p.distance || "",
-            distance_unit: p.distance_unit || "km",
-          })),
-        image_url: formData.image_url,
-        map_url: formData.map_url || undefined,
-        media_url: formData.media_url || undefined,
-        pincode: formData.pincode || undefined,
-        owner_name: formData.owner_name || undefined,
-        developer_name: formData.developer_name || undefined,
-        project_name: formData.project_name || undefined,
-        status: "draft",
-        isFeatured: formData.isFeatured,
-        isVerified: formData.isVerified,
-      };
+      const draftData = buildDraftDataPayload();
 
       if (editingProperty?._id) {
         await axiosInstance.put(
           `/property/${editingProperty._id}`,
           draftData
         );
+        removeLocalDraft(editingProperty._id);
+        setIsRestoredDraft(false);
+        setPendingGlobalDraft(null);
         setOpen(false);
         resetForm();
         showMessage(
@@ -1212,6 +1525,9 @@ const Properties = () => {
         );
       } else {
         await axiosInstance.post("/property", draftData);
+        removeLocalDraft("new");
+        setIsRestoredDraft(false);
+        setPendingGlobalDraft(null);
         setOpen(false);
         resetForm();
         showMessage(
@@ -1261,9 +1577,26 @@ const Properties = () => {
 
     try {
       setLoading(true);
+      const cleanNearbyPlaces = Array.isArray(property.nearby_places)
+        ? property.nearby_places
+            .filter((p) => p && p.name && p.name.trim() !== "")
+            .map((p) => ({
+              name: p.name.trim(),
+              type: p.type || "Landmark",
+              distance:
+                p.distance !== "" && p.distance !== null && p.distance !== undefined && !isNaN(Number(p.distance))
+                  ? Number(p.distance)
+                  : undefined,
+              distance_unit: p.distance_unit || "km",
+            }))
+        : [];
+
       await axiosInstance.put(`/property/${property._id}/publish`, {
         status: "available",
+        nearby_places: cleanNearbyPlaces,
       });
+      removeLocalDraft(property._id);
+      setIsRestoredDraft(false);
 
       showMessage(
         "success",
@@ -1290,6 +1623,10 @@ const Properties = () => {
     try {
       setLoading(true);
       await axiosInstance.delete(`/property/${deleteId}`);
+      removeLocalDraft(deleteId);
+      if (pendingGlobalDraft?.draftId === deleteId) {
+        setPendingGlobalDraft(null);
+      }
       setDeleteId(null);
 
       showMessage(
@@ -1528,6 +1865,50 @@ const Properties = () => {
 
   return (
     <div className="space-y-7">
+      {/* Unsaved Draft Recovery Top Banner */}
+      {pendingGlobalDraft && !open && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border-2 border-amber-300/90 bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-100/70 p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-center gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xs">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className="text-sm font-black text-amber-950">
+                  Unsaved Property Draft Found
+                </h4>
+                <span className="rounded-full bg-amber-200/90 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-900">
+                  {formatDraftTime(pendingGlobalDraft.timestamp)}
+                </span>
+              </div>
+              <p className="text-xs text-amber-900 font-semibold mt-0.5">
+                You were editing <strong>"{pendingGlobalDraft.name}"</strong> before leaving. Would you like to resume editing where you left off?
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                removeLocalDraft(pendingGlobalDraft.draftId);
+                setPendingGlobalDraft(null);
+              }}
+              className="h-9 rounded-xl text-xs font-bold text-amber-900 hover:bg-amber-200/70 hover:text-amber-950"
+            >
+              Discard Draft
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => resumeDraft(pendingGlobalDraft)}
+              className="h-9 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+            >
+              Resume Editing
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
@@ -1551,10 +1932,7 @@ const Properties = () => {
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
-            onClick={() => {
-              resetForm();
-              setOpen(true);
-            }}
+            onClick={handleAddNewProperty}
             className="h-11 rounded-2xl bg-gradient-to-r from-primary to-rose-600 px-5 font-black text-white shadow-md shadow-primary/25 hover:opacity-95"
           >
             <Plus className="mr-2 h-4 w-4 stroke-[3]" />
@@ -1698,10 +2076,7 @@ const Properties = () => {
           ) : (
             <Button
               size="sm"
-              onClick={() => {
-                resetForm();
-                setOpen(true);
-              }}
+              onClick={handleAddNewProperty}
               className="mt-2 rounded-xl font-bold bg-primary text-primary-foreground"
             >
               <Plus className="mr-1.5 h-4 w-4 stroke-[2.5]" />
@@ -1800,6 +2175,11 @@ const Properties = () => {
         addNearbyPlace={addNearbyPlace}
         updateNearbyPlace={updateNearbyPlace}
         removeNearbyPlace={removeNearbyPlace}
+        autoSaveStatus={autoSaveStatus}
+        lastSavedTime={lastSavedTime}
+        isRestoredDraft={isRestoredDraft}
+        onDiscardDraft={handleDiscardDraft}
+        hasUnsavedChanges={hasUnsavedChanges}
       />
 
       <PropertyQuickViewDialog

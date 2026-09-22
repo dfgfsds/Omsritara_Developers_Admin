@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   X,
   ChevronLeft,
@@ -6,8 +6,10 @@ import {
   Loader2,
   Sparkles,
   Check,
+  CheckCircle2,
   Building2,
   FileText,
+  CloudOff,
 } from "lucide-react";
 import {
   Dialog,
@@ -15,6 +17,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,6 +83,11 @@ interface PropertyFormDialogProps {
   addNearbyPlace: (presetType?: string) => void;
   updateNearbyPlace: (index: number, field: string, value: string) => void;
   removeNearbyPlace: (index: number) => void;
+  autoSaveStatus?: "saved" | "saving" | "local" | "idle";
+  lastSavedTime?: string | null;
+  isRestoredDraft?: boolean;
+  onDiscardDraft?: () => void;
+  hasUnsavedChanges?: boolean;
 }
 
 export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
@@ -113,51 +129,140 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
   addNearbyPlace,
   updateNearbyPlace,
   removeNearbyPlace,
+  autoSaveStatus = "idle",
+  lastSavedTime = null,
+  isRestoredDraft = false,
+  onDiscardDraft,
+  hasUnsavedChanges = false,
 }) => {
+  const [showExitConfirm, setShowExitConfirm] = useState(false);
+
   const stepIds = ["basic", "specs", "media", "amenities", "settings"];
   const currentStepIdx = stepIds.indexOf(formActiveTab);
   const progressPercent = Math.round(((currentStepIdx + 1) / stepIds.length) * 100);
 
+  const handleAttemptClose = () => {
+    if (hasUnsavedChanges) {
+      setShowExitConfirm(true);
+    } else {
+      onOpenChange(false);
+      resetForm();
+    }
+  };
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[94vh] w-[96vw] max-w-5xl flex-col p-0 border border-slate-200/90 shadow-2xl rounded-3xl overflow-hidden bg-slate-50/70 backdrop-blur-xl">
-        <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
-          {/* Top Decorative Gradient Strip */}
-          <div className="h-1.5 w-full bg-gradient-to-r from-primary via-rose-500 to-amber-500 shrink-0" />
+    <>
+      <Dialog
+        open={open}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            handleAttemptClose();
+          } else {
+            onOpenChange(true);
+          }
+        }}
+      >
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (hasUnsavedChanges) {
+              e.preventDefault();
+              setShowExitConfirm(true);
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (hasUnsavedChanges) {
+              e.preventDefault();
+              setShowExitConfirm(true);
+            }
+          }}
+          className="flex h-[94vh] w-[96vw] max-w-5xl flex-col p-0 border border-slate-200/90 shadow-2xl rounded-3xl overflow-hidden bg-slate-50/70 backdrop-blur-xl"
+        >
+          <form onSubmit={handleSubmit} className="flex h-full flex-col overflow-hidden">
+            {/* Top Decorative Gradient Strip */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-primary via-rose-500 to-amber-500 shrink-0" />
 
-          {/* Modal Header */}
-          <DialogHeader className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm px-6 py-4 md:px-8 shrink-0">
-            <div className="flex items-center justify-between gap-4">
-              <div className="space-y-0.5">
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
-                      {editingProperty ? (
-                        <Building2 className="h-4 w-4" />
-                      ) : (
-                        <Sparkles className="h-4 w-4" />
-                      )}
-                    </div>
-                    {editingProperty ? "Edit Property Listing" : "Create New Property"}
-                  </DialogTitle>
+            {/* Modal Header */}
+            <DialogHeader className="border-b border-slate-200/80 bg-white/95 backdrop-blur-sm px-6 py-4 md:px-8 shrink-0">
+              <div className="flex items-center justify-between gap-4">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <DialogTitle className="text-lg font-bold text-slate-900 flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-xs">
+                        {editingProperty ? (
+                          <Building2 className="h-4 w-4" />
+                        ) : (
+                          <Sparkles className="h-4 w-4" />
+                        )}
+                      </div>
+                      {editingProperty ? "Edit Property Listing" : "Create New Property"}
+                    </DialogTitle>
 
-                  {editingProperty && (
-                    <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
-                      {formData.name || "ID: " + editingProperty._id.slice(-6)}
-                    </span>
-                  )}
+                    {editingProperty && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200/80 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                        <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse" />
+                        {formData.name || "ID: " + editingProperty._id.slice(-6)}
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    {editingProperty
+                      ? "Update architecture details, price valuation, gallery photos, and lifestyle amenities."
+                      : "Complete all 5 guided steps to showcase and publish this listing to buyers."}
+                  </p>
                 </div>
 
-                <p className="text-xs text-slate-500">
-                  {editingProperty
-                    ? "Update architecture details, price valuation, gallery photos, and lifestyle amenities."
-                    : "Complete all 5 guided steps to showcase and publish this listing to buyers."}
-                </p>
-              </div>
+                {/* Auto-Save & Status Badge */}
+                <div className="flex items-center gap-2 shrink-0">
+                  {autoSaveStatus === "saving" && (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-[11px] font-bold text-blue-700 shadow-xs animate-pulse">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                      Saving draft...
+                    </div>
+                  )}
 
-            </div>
-          </DialogHeader>
+                  {autoSaveStatus === "saved" && (
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-200 px-3 py-1 text-[11px] font-bold text-emerald-800 shadow-xs">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      <span>Draft auto-saved {lastSavedTime ? `• ${lastSavedTime}` : ""}</span>
+                    </div>
+                  )}
+
+                  {autoSaveStatus === "local" && (
+                    <div
+                      className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 border border-amber-200 px-3 py-1 text-[11px] font-bold text-amber-900 shadow-xs"
+                      title="Changes are securely auto-saved locally on your device (Offline / Network drop resilient)"
+                    >
+                      <CloudOff className="h-3.5 w-3.5 text-amber-600" />
+                      <span>Saved locally (Offline) {lastSavedTime ? `• ${lastSavedTime}` : ""}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Restored Draft Recovery Notification */}
+            {isRestoredDraft && (
+              <div className="bg-gradient-to-r from-amber-50 via-orange-50 to-amber-100/70 border-b border-amber-200/90 px-6 py-2.5 flex items-center justify-between gap-3 text-xs text-amber-950 shrink-0 shadow-inner">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-amber-600 shrink-0" />
+                  <span>
+                    <strong>Draft Restored:</strong> Your unsaved edits {lastSavedTime ? `from ${lastSavedTime}` : ""} were automatically recovered so you can continue editing.
+                  </span>
+                </div>
+                {onDiscardDraft && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={onDiscardDraft}
+                    className="h-6.5 text-[11px] font-black text-rose-700 hover:text-rose-900 hover:bg-rose-100/70 rounded-lg px-2"
+                  >
+                    Discard & Start Fresh
+                  </Button>
+                )}
+              </div>
+            )}
 
           {/* Stepper Tabs */}
           <Tabs
@@ -299,10 +404,7 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
                   type="button"
                   variant="ghost"
                   className="rounded-2xl text-xs font-bold text-slate-600 hover:text-slate-950 hover:bg-slate-100"
-                  onClick={() => {
-                    onOpenChange(false);
-                    resetForm();
-                  }}
+                  onClick={handleAttemptClose}
                 >
                   Cancel
                 </Button>
@@ -355,7 +457,7 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
                   </Button>
                 ) : null}
 
-                {handleSaveDraft && (!editingProperty || editingProperty.status === "draft") && (
+                {handleSaveDraft && (
                   <Button
                     type="button"
                     variant="outline"
@@ -393,5 +495,57 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
         </form>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={showExitConfirm} onOpenChange={setShowExitConfirm}>
+      <AlertDialogContent className="rounded-3xl max-w-md border border-slate-200/90 shadow-2xl p-6 bg-white">
+        <AlertDialogHeader>
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 mb-2">
+            <FileText className="h-6 w-6 text-amber-700" />
+          </div>
+          <AlertDialogTitle className="text-lg font-black text-slate-950">
+            Unsaved Property Changes
+          </AlertDialogTitle>
+          <AlertDialogDescription className="text-xs text-slate-600 leading-relaxed font-medium">
+            You have active edits in this listing. Don't worry, your progress is automatically cached, but would you like to save it to your drafts before leaving?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-4">
+          <AlertDialogCancel
+            onClick={() => setShowExitConfirm(false)}
+            className="rounded-xl text-xs font-bold border-slate-200 text-slate-700 hover:bg-slate-100"
+          >
+            Keep Editing
+          </AlertDialogCancel>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowExitConfirm(false);
+              if (onDiscardDraft) onDiscardDraft();
+              onOpenChange(false);
+              resetForm();
+            }}
+            className="rounded-xl text-xs font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+          >
+            Discard Changes
+          </Button>
+          {handleSaveDraft && (
+            <Button
+              type="button"
+              onClick={async () => {
+                setShowExitConfirm(false);
+                await handleSaveDraft();
+                onOpenChange(false);
+                resetForm();
+              }}
+              className="rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs"
+            >
+              Save as Draft & Exit
+            </Button>
+          )}
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  </>
   );
 };
