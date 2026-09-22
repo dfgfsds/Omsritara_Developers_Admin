@@ -49,7 +49,7 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:border-slate-300">
       {/* Card Photo & Badges */}
-      <div className="relative aspect-16/9 w-full overflow-hidden bg-slate-950">
+      <div className="relative aspect-video w-full h-48 sm:h-52 overflow-hidden bg-slate-950">
         <img
           src={cover.url}
           alt={property.name || "Property Showcase"}
