@@ -9,6 +9,7 @@ import {
   Menu,
   User,
   FileText,
+  Briefcase,
 } from "lucide-react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -29,9 +30,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 
-const menuItems = [
+const adminMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Properties", url: "/properties", icon: Building2 },
+  { title: "Agents", url: "/agents", icon: Briefcase },
   { title: "Property Types", url: "/property-types", icon: Building },
   { title: "Enquiries", url: "/enquiries", icon: MessageCircle },
   { title: "Amenities Type", url: "/amenitiestype", icon: Star },
@@ -40,12 +42,20 @@ const menuItems = [
   { title: "Users", url: "/users", icon: User },
 ];
 
+const agentMenuItems = [
+  { title: "Dashboard", url: "/dashboard", icon: Home },
+  { title: "My Properties", url: "/properties", icon: Building2 },
+  { title: "My Enquiries", url: "/enquiries", icon: MessageCircle },
+];
+
 export function AppSidebar() {
   const { state } = useSidebar();
   const location = useLocation();
-  const { logout } = useAuth();
+  const { logout, role, isAgent, currentAgent } = useAuth();
   const { toast } = useToast();
   const collapsed = state === "collapsed";
+
+  const menuItems = isAgent ? agentMenuItems : adminMenuItems;
 
   const handleLogout = () => {
     logout();
@@ -69,12 +79,28 @@ export function AppSidebar() {
             />
             {!collapsed && (
               <div>
-                <h1 className="text-xl font-bold text-sidebar-foreground">
-                  OST Developers
-                </h1>
-                <p className="text-[10px] text-sidebar-foreground/70 font-medium tracking-wide">
-                  Admin Real Estate CRM
-                </p>
+                <div className="flex items-center gap-1.5">
+                  <h1 className="text-xl font-bold text-sidebar-foreground">
+                    OST Developers
+                  </h1>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span
+                    className={cn(
+                      "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-md",
+                      isAgent
+                        ? "bg-amber-400/20 text-amber-300 border border-amber-400/30"
+                        : "bg-emerald-400/20 text-emerald-300 border border-emerald-400/30"
+                    )}
+                  >
+                    {isAgent ? "Agent View" : "Admin CRM"}
+                  </span>
+                  {isAgent && currentAgent && (
+                    <span className="text-[10px] text-sidebar-foreground/80 truncate font-semibold max-w-[100px]">
+                      {currentAgent.name.split(" ")[0]}
+                    </span>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -84,7 +110,7 @@ export function AppSidebar() {
         <SidebarGroup className={collapsed ? "px-1.5" : "px-2"}>
           {!collapsed && (
             <SidebarGroupLabel className="text-sidebar-foreground/75 text-xs font-bold uppercase tracking-wider px-3 mb-1">
-              Management
+              {isAgent ? "Agent Workspace" : "Management"}
             </SidebarGroupLabel>
           )}
           <SidebarGroupContent>

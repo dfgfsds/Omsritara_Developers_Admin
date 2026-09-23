@@ -38,6 +38,12 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import axiosInstance from "@/lib/axiosInstance";
+import { useAuth } from "@/context/AuthContext";
+import {
+  getAgentProperties,
+  getAgentEnquiries,
+  updateAgentEnquiryStatus,
+} from "@/data/mockAgentsData";
 
 // Soft, harmonious status badge colors
 const getStatusBadgeStyles = (status: string) => {
@@ -69,6 +75,7 @@ const getPriorityBadgeStyles = (priority: string) => {
 };
 
 const Dashboard = () => {
+  const { role, isAgent, isAdmin, currentAgent } = useAuth();
   const [enquiries, setEnquiries] = useState<any[]>([]);
   const [stats, setStats] = useState<any>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -119,6 +126,26 @@ const Dashboard = () => {
   };
 
   const fetchEnquiries = async () => {
+    if (isAgent && currentAgent) {
+      const agentEnqs = getAgentEnquiries(currentAgent._id);
+      const formatted = agentEnqs.map((item: any) => ({
+        id: item._id,
+        name: item.name,
+        email: item.email,
+        mobile: item.mobile,
+        propertyId: item.propertyId || "-",
+        propertyName: item.propertyName || "-",
+        message: item.message || "No message",
+        status: formatStatus(item.status),
+        priority: formatPriority(item.priority),
+        source: "Agent Lead",
+        createdAt: item.createdAt,
+        followUpDate: null,
+      }));
+      setEnquiries(formatted);
+      return;
+    }
+
     try {
       const res = await axiosInstance.get("/enquiry");
       if (res.data?.result) {
@@ -144,6 +171,20 @@ const Dashboard = () => {
   };
 
   const fetchStats = async () => {
+    if (isAgent && currentAgent) {
+      const agentProps = getAgentProperties(currentAgent._id);
+      const agentEnqs = getAgentEnquiries(currentAgent._id);
+      setStats({
+        result: {
+          property: agentProps.length,
+          enquiry: agentEnqs.length,
+          available: agentProps.filter((p) => p.status === "available").length,
+          sold: agentProps.filter((p) => p.status === "sold").length,
+        },
+      });
+      return;
+    }
+
     try {
       const res = await axiosInstance.get("/dashboard");
       setStats(res.data);
@@ -159,9 +200,8 @@ const Dashboard = () => {
   };
 
   useEffect(() => {
-    fetchEnquiries();
-    fetchStats();
-  }, []);
+    refreshAll();
+  }, [isAgent, currentAgent?._id]);
 
   const handleStatusClick = async (id: string, currentStatus: string) => {
     const newStatus = statusCycle[currentStatus] || "New";
@@ -279,13 +319,19 @@ const Dashboard = () => {
           <div>
             <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 px-3 py-0.5 text-[11px] font-black text-indigo-900 tracking-wide mb-2 shadow-2xs">
               <Sparkles className="h-3 w-3 text-indigo-600" />
-              Real Estate Management Suite
+              {isAgent
+                ? `Agent Workspace • ${currentAgent?.city || "Tamil Nadu"}`
+                : "Real Estate Management Suite"}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">
-              Executive Overview
+              {isAgent
+                ? `Welcome, ${currentAgent?.name || "Agent"}!`
+                : "Executive Overview"}
             </h1>
             <p className="mt-1 text-xs font-semibold text-slate-600 max-w-xl">
-              Monitor key real estate portfolio metrics, track prospective customer inquiries, and manage listing statuses in real time.
+              {isAgent
+                ? `Here are your assigned properties (${stats?.result?.property || 0} listings) and direct customer inquiries (${stats?.result?.enquiry || 0} leads).`
+                : "Monitor key real estate portfolio metrics, track prospective customer inquiries, and manage listing statuses in real time."}
             </p>
           </div>
 
