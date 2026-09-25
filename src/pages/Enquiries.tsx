@@ -45,6 +45,8 @@ import {
 } from "lucide-react";
 import axiosInstance from "@/lib/axiosInstance";
 import { toast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/AuthContext";
+import { getAgentEnquiries, getStoredEnquiries } from "@/data/mockAgentsData";
 
 // Soft status pill styling
 const getStatusBadgeStyles = (status: string) => {
@@ -76,6 +78,7 @@ const getPriorityBadgeStyles = (priority: string) => {
 };
 
 const Enquiries = () => {
+  const { role, isAgent, isAdmin, currentAgent } = useAuth();
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
@@ -135,6 +138,26 @@ const Enquiries = () => {
   };
 
   const fetchEnquiries = async () => {
+    if (isAgent && currentAgent) {
+      const agentEnqs = getAgentEnquiries(currentAgent._id);
+      const formatted = agentEnqs.map((item: any) => ({
+        id: item._id,
+        name: item.name,
+        email: item.email,
+        mobile: item.mobile,
+        propertyId: item.propertyId || "-",
+        propertyName: item.propertyName || "-",
+        message: item.message || "No message provided",
+        status: formatStatus(item.status),
+        priority: formatPriority(item.priority),
+        source: "Agent Lead",
+        createdAt: item.createdAt,
+        followUpDate: null,
+      }));
+      setEnquiries(formatted);
+      return;
+    }
+
     try {
       const res = await axiosInstance.get("/enquiry");
       if (res.data?.result) {
@@ -167,7 +190,7 @@ const Enquiries = () => {
 
   useEffect(() => {
     fetchEnquiries();
-  }, []);
+  }, [isAgent, currentAgent?._id]);
 
   // Handler for cycling status
   const handleStatusClick = async (id: string, currentStatus: string) => {

@@ -42,6 +42,8 @@ import {
   isFormDirtyOrHasContent,
   StoredPropertyDraft,
 } from "@/utils/propertyDraftStorage";
+import { useAuth } from "@/context/AuthContext";
+import { getAgentProperties } from "@/data/mockAgentsData";
 
 const propertyStatusCycle: Record<
   string,
@@ -52,7 +54,10 @@ const propertyStatusCycle: Record<
   sold: "available",
 };
 
+const str = (v: any) => (v !== undefined && v !== null ? String(v) : "");
+
 const Properties = () => {
+  const { role, isAgent, isAdmin, currentAgent } = useAuth();
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
@@ -298,6 +303,35 @@ const Properties = () => {
   };
 
   const fetchProperties = async (draftMode = isDraftView) => {
+    if (isAgent && currentAgent) {
+      setLoading(true);
+      const agentProps = getAgentProperties(currentAgent._id);
+      const mappedProps: Property[] = agentProps.map((p) => ({
+        _id: p._id,
+        name: p.name,
+        type: { name: p.type },
+        location: { address: p.location, city: p.location.split(",").pop()?.trim() || "Chennai" },
+        status: p.status,
+        price: parseInt(p.price.replace(/[^\d]/g, "")) || 1000000,
+        image_url: p.image ? [p.image] : [],
+        isFeatured: true,
+        isVerified: true,
+        createdAt: p.createdAt,
+      }));
+      setProperties(mappedProps);
+      setStats({
+        total: mappedProps.length,
+        available: mappedProps.filter((p) => p.status === "available").length,
+        underConstruction: mappedProps.filter((p) => p.status === "under_construction").length,
+        sold: mappedProps.filter((p) => p.status === "sold").length,
+        featured: mappedProps.length,
+        verified: mappedProps.length,
+        draft: 0,
+      });
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       const url = draftMode ? "/property?status=draft" : "/property";
@@ -317,6 +351,7 @@ const Properties = () => {
   };
 
   const fetchPropertyStats = async () => {
+    if (isAgent) return; // Handled directly in fetchProperties for agent
     try {
       const response = await axiosInstance.get("/property/stats");
       const result =
@@ -346,11 +381,11 @@ const Properties = () => {
     fetchAmenities();
     fetchAllAmenities();
     fetchPropertyStats();
-  }, []);
+  }, [isAgent, currentAgent?._id]);
 
   useEffect(() => {
     fetchProperties(isDraftView);
-  }, [isDraftView]);
+  }, [isDraftView, isAgent, currentAgent?._id]);
 
   const resetAmenitySelector = () => {
     setSelectedAmenity("");
@@ -1584,7 +1619,10 @@ const Properties = () => {
               name: p.name.trim(),
               type: p.type || "Landmark",
               distance:
-                p.distance !== "" && p.distance !== null && p.distance !== undefined && !isNaN(Number(p.distance))
+                p.distance !== null &&
+                p.distance !== undefined &&
+                (p.distance as any) !== "" &&
+                !isNaN(Number(p.distance))
                   ? Number(p.distance)
                   : undefined,
               distance_unit: p.distance_unit || "km",

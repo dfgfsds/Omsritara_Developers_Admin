@@ -12,11 +12,13 @@ import Enquiries from "./pages/Enquiries";
 import Amenities from "./pages/Amenities";
 import AmenitiesType from "./pages/Amenitiestype";
 import Users from "./pages/Users";
+import Agents from "./pages/Agents";
 
 import DashboardLayout from "./components/layout/DashboardLayout";
 import NotFound from "./pages/NotFound";
 import { AuthProvider } from "./context/AuthContext";
 import Blogs from "./pages/Blog";
+import RoleProtectedRoute from "./components/auth/RoleProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -49,17 +51,19 @@ const App = () => (
               }
             />
 
-            {/* Property Types */}
+            {/* Property Types (Admin only) */}
             <Route
               path="/property-types"
               element={
                 <DashboardLayout>
-                  <PropertyTypes />
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <PropertyTypes />
+                  </RoleProtectedRoute>
                 </DashboardLayout>
               }
             />
 
-            {/* Properties */}
+            {/* Properties (Admin & Agent) */}
             <Route
               path="/properties"
               element={
@@ -69,7 +73,19 @@ const App = () => (
               }
             />
 
-            {/* Enquiries */}
+            {/* Agents Management (Admin only) */}
+            <Route
+              path="/agents"
+              element={
+                <DashboardLayout>
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <Agents />
+                  </RoleProtectedRoute>
+                </DashboardLayout>
+              }
+            />
+
+            {/* Enquiries (Admin & Agent) */}
             <Route
               path="/enquiries"
               element={
@@ -79,12 +95,14 @@ const App = () => (
               }
             />
 
-            {/* Amenities */}
+            {/* Amenities (Admin only) */}
             <Route
               path="/amenities"
               element={
                 <DashboardLayout>
-                  <Amenities />
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <Amenities />
+                  </RoleProtectedRoute>
                 </DashboardLayout>
               }
             />
@@ -92,27 +110,33 @@ const App = () => (
               path="/blogs"
               element={
                 <DashboardLayout>
-                  <Blogs />
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <Blogs />
+                  </RoleProtectedRoute>
                 </DashboardLayout>
               }
             />
 
-            {/* Amenities Type */}
+            {/* Amenities Type (Admin only) */}
             <Route
               path="/amenitiestype"
               element={
                 <DashboardLayout>
-                  <AmenitiesType />
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <AmenitiesType />
+                  </RoleProtectedRoute>
                 </DashboardLayout>
               }
             />
 
-            {/* Users */}
+            {/* Users (Admin only) */}
             <Route
               path="/users"
               element={
                 <DashboardLayout>
-                  <Users />
+                  <RoleProtectedRoute allowedRoles={["admin"]}>
+                    <Users />
+                  </RoleProtectedRoute>
                 </DashboardLayout>
               }
             />

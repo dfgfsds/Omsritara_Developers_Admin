@@ -19,6 +19,10 @@ import {
   MapPin,
   Tag,
   CornerDownLeft,
+  Briefcase,
+  ShieldCheck,
+  Check,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -33,6 +37,8 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import axiosInstance from "@/lib/axiosInstance";
+import { getStoredAgents } from "@/data/mockAgentsData";
+import { cn } from "@/lib/utils";
 
 // App navigation items with searchable keywords
 const navItems = [
@@ -51,6 +57,14 @@ const navItems = [
     keywords: ["properties", "property", "listings", "villa", "apartment", "plot", "sale"],
   },
   {
+    name: "Agents",
+    path: "/agents",
+    icon: Briefcase,
+    desc: "Real estate agents & team management",
+    keywords: ["agents", "agent", "staff", "realtor", "broker", "sales"],
+    adminOnly: true,
+  },
+  {
     name: "Enquiries",
     path: "/enquiries",
     icon: MessageCircle,
@@ -63,6 +77,7 @@ const navItems = [
     icon: FolderTree,
     desc: "Categories & configuration",
     keywords: ["types", "categories", "commercial", "residential", "villa", "plot"],
+    adminOnly: true,
   },
   {
     name: "Amenities",
@@ -70,6 +85,7 @@ const navItems = [
     icon: Sparkles,
     desc: "Facilities & feature lists",
     keywords: ["amenities", "amenity", "features", "facilities", "swimming", "gym"],
+    adminOnly: true,
   },
   {
     name: "Blogs",
@@ -77,6 +93,7 @@ const navItems = [
     icon: Newspaper,
     desc: "News, updates & articles",
     keywords: ["blogs", "blog", "articles", "news", "posts"],
+    adminOnly: true,
   },
   {
     name: "Users & Roles",
@@ -84,11 +101,12 @@ const navItems = [
     icon: Users,
     desc: "Team accounts & permissions",
     keywords: ["users", "roles", "staff", "admin", "accounts", "permissions"],
+    adminOnly: true,
   },
 ];
 
 export function DashboardHeader() {
-  const { userData } = useAuth();
+  const { userData, role, isAdmin, isAgent, currentAgent, logout } = useAuth();
   const navigate = useNavigate();
 
   // Search state
@@ -182,15 +200,18 @@ export function DashboardHeader() {
 
   // Filtered Navigation Pages
   const filteredNav = useMemo(() => {
-    if (!query.trim()) return navItems;
+    const accessibleItems = isAgent
+      ? navItems.filter((item) => !item.adminOnly)
+      : navItems;
+    if (!query.trim()) return accessibleItems;
     const q = query.toLowerCase().trim();
-    return navItems.filter(
+    return accessibleItems.filter(
       (item) =>
         item.name.toLowerCase().includes(q) ||
         item.desc.toLowerCase().includes(q) ||
         item.keywords.some((k) => k.includes(q))
     );
-  }, [query]);
+  }, [query, isAgent]);
 
   // Filtered Properties
   const filteredProperties = useMemo(() => {
@@ -551,8 +572,31 @@ export function DashboardHeader() {
         </div>
       </div>
 
-      {/* Right side: Notifications & Profile */}
-      <div className="flex items-center gap-3 sm:gap-4 shrink-0">
+      {/* Right side: Role Badge, Notifications & Profile */}
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        {/* Role Badge */}
+        <div
+          className={cn(
+            "h-8 px-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 border shadow-xs select-none",
+            isAgent
+              ? "bg-amber-50 text-amber-900 border-amber-300"
+              : "bg-emerald-50 text-emerald-900 border-emerald-300"
+          )}
+        >
+          {isAgent ? (
+            <>
+              <Briefcase className="h-3.5 w-3.5 text-amber-600" />
+              <span className="hidden sm:inline text-amber-700">Agent:</span>
+              <span className="truncate max-w-[100px] font-extrabold">{currentAgent?.name?.split(" ")[0] || "Agent"}</span>
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+              <span className="font-extrabold">Admin CRM</span>
+            </>
+          )}
+        </div>
+
         {/* Notifications */}
         <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl">
           <Bell className="h-4 w-4 text-slate-600" />
@@ -562,10 +606,12 @@ export function DashboardHeader() {
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-9 w-9 rounded-full p-0">
+            <Button variant="ghost" className="h-9 w-9 rounded-full p-0 ring-2 ring-slate-100 hover:ring-primary/40 transition-all">
               <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground font-black text-xs">
-                  {userData?.name?.[0] || userDetails?.name?.[0] || "U"}
+                <AvatarFallback className={cn("font-black text-xs", isAgent ? "bg-amber-600 text-white" : "bg-primary text-primary-foreground")}>
+                  {isAgent
+                    ? currentAgent?.name?.[0] || "A"
+                    : userData?.name?.[0] || userDetails?.name?.[0] || "U"}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -573,22 +619,64 @@ export function DashboardHeader() {
           <DropdownMenuContent className="w-56 bg-popover rounded-2xl shadow-xl border border-slate-200" align="end">
             <DropdownMenuLabel>
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-bold text-slate-900 leading-none">
-                  {userData?.name || userDetails?.name || "Administrator"}
-                </p>
-                <p className="text-xs font-medium leading-none text-muted-foreground">
-                  {userData?.email || userDetails?.email || "admin@omsritara.com"}
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-bold text-slate-900 leading-none">
+                    {isAgent
+                      ? currentAgent?.name || "Agent"
+                      : userData?.name || userDetails?.name || "Administrator"}
+                  </p>
+                  <span
+                    className={cn(
+                      "text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full",
+                      isAgent
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-emerald-100 text-emerald-800"
+                    )}
+                  >
+                    {isAgent ? "Agent" : "Admin"}
+                  </span>
+                </div>
+                <p className="text-xs font-medium leading-none text-muted-foreground truncate">
+                  {isAgent
+                    ? currentAgent?.email || "agent@omsritara.com"
+                    : userData?.email || userDetails?.email || "admin@omsritara.com"}
                 </p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => navigate("/users")} className="cursor-pointer font-semibold text-xs">
-              <User className="mr-2 h-4 w-4 text-slate-500" />
-              Manage Users & Roles
-            </DropdownMenuItem>
+
+            {isAdmin && (
+              <>
+                <DropdownMenuItem onClick={() => navigate("/agents")} className="cursor-pointer font-semibold text-xs">
+                  <Briefcase className="mr-2 h-4 w-4 text-slate-500" />
+                  Manage Agents
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => navigate("/users")} className="cursor-pointer font-semibold text-xs">
+                  <User className="mr-2 h-4 w-4 text-slate-500" />
+                  Manage Users & Roles
+                </DropdownMenuItem>
+              </>
+            )}
+
             <DropdownMenuItem onClick={() => navigate("/properties")} className="cursor-pointer font-semibold text-xs">
               <Building2 className="mr-2 h-4 w-4 text-slate-500" />
-              Properties Portfolio
+              {isAgent ? "My Properties Portfolio" : "Properties Portfolio"}
+            </DropdownMenuItem>
+
+            {isAgent && (
+              <DropdownMenuItem onClick={() => navigate("/enquiries")} className="cursor-pointer font-semibold text-xs">
+                <MessageCircle className="mr-2 h-4 w-4 text-slate-500" />
+                My Client Enquiries
+              </DropdownMenuItem>
+            )}
+
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={logout}
+              className="cursor-pointer font-bold text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+            >
+              <LogOut className="mr-2 h-4 w-4 text-rose-500" />
+              Sign Out
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
