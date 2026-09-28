@@ -308,10 +308,10 @@ export function DashboardHeader() {
     filteredEnquiries.length;
 
   return (
-    <header className="relative h-16 border-b border-border bg-card shadow-xs flex items-center justify-between px-4 sm:px-6 z-40">
+    <header className="sticky top-0 z-40 h-16 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl shadow-xs flex items-center justify-between px-4 sm:px-6 transition-all">
       {/* Left: Sidebar trigger and Spotlight Search */}
       <div className="flex items-center gap-3 sm:gap-4 flex-1 max-w-2xl">
-        <SidebarTrigger className="h-9 w-9 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 transition-colors shrink-0" />
+        <SidebarTrigger className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-slate-950 border border-transparent hover:border-slate-200/80 transition-all shrink-0" />
 
         {/* Global Search Container */}
         <div ref={containerRef} className="relative w-full max-w-md">
@@ -331,7 +331,7 @@ export function DashboardHeader() {
                 setIsOpen(true);
                 fetchSearchData();
               }}
-              className="h-10 w-full rounded-2xl border border-slate-200/90 bg-slate-100/75 pl-10 pr-20 text-xs font-semibold text-slate-900 placeholder:text-slate-400 shadow-2xs transition-all hover:bg-slate-100/90 hover:border-slate-300 focus:bg-white focus:border-primary/50 focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="h-10 w-full rounded-full border border-slate-200/90 bg-slate-100/70 pl-10 pr-20 text-xs font-semibold text-slate-900 placeholder:text-slate-400 shadow-2xs transition-all hover:bg-white hover:border-slate-300 focus:bg-white focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
 
             {/* Right indicators: Clear button & Ctrl+K badge */}
@@ -598,22 +598,42 @@ export function DashboardHeader() {
         </div>
 
         {/* Notifications */}
-        <Button variant="ghost" size="icon" className="relative h-9 w-9 rounded-xl">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-9 w-9 rounded-full border border-slate-200/80 bg-white/80 hover:bg-slate-100 hover:text-slate-950 transition-all shadow-2xs"
+          title="Notifications"
+        >
           <Bell className="h-4 w-4 text-slate-600" />
-          <span className="absolute 1.5 top-1.5 right-1.5 h-2 w-2 bg-rose-500 rounded-full ring-2 ring-white" />
+          <span className="absolute top-2 right-2 h-2 w-2 bg-rose-500 rounded-full ring-2 ring-white animate-pulse" />
         </Button>
 
         {/* User Menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" className="h-9 w-9 rounded-full p-0 ring-2 ring-slate-100 hover:ring-primary/40 transition-all">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className={cn("font-black text-xs", isAgent ? "bg-amber-600 text-white" : "bg-primary text-primary-foreground")}>
+            <Button
+              variant="ghost"
+              className="h-9 px-1.5 sm:px-2.5 rounded-full border border-slate-200/90 bg-white/90 hover:bg-white hover:border-slate-300 ring-2 ring-transparent hover:ring-primary/20 transition-all shadow-2xs flex items-center gap-2"
+            >
+              <Avatar className="h-7 w-7 ring-1 ring-slate-200">
+                <AvatarFallback
+                  className={cn(
+                    "font-black text-xs",
+                    isAgent
+                      ? "bg-amber-600 text-white"
+                      : "bg-primary text-primary-foreground"
+                  )}
+                >
                   {isAgent
                     ? currentAgent?.name?.[0] || "A"
                     : userData?.name?.[0] || userDetails?.name?.[0] || "U"}
                 </AvatarFallback>
               </Avatar>
+              <span className="hidden sm:inline-block text-xs font-bold text-slate-800 max-w-[110px] truncate">
+                {isAgent
+                  ? currentAgent?.name?.split(" ")[0] || "Agent"
+                  : userData?.name?.split(" ")[0] || userDetails?.name?.split(" ")[0] || "Admin"}
+              </span>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56 bg-popover rounded-2xl shadow-xl border border-slate-200" align="end">
