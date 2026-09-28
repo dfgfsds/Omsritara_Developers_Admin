@@ -393,6 +393,22 @@ export const restoreStoredAgent = (id: string): Agent | null => {
   return updateStoredAgent(id, { status: "active" });
 };
 
+export const toggleStoredAgentStatus = (id: string): Agent | null => {
+  const agents = getStoredAgents();
+  const agent = agents.find((a) => a._id === id);
+  if (!agent) return null;
+  const newStatus = agent.status === "active" ? "inactive" : "active";
+  return updateStoredAgent(id, { status: newStatus });
+};
+
+export const deleteStoredAgent = (id: string): boolean => {
+  const agents = getStoredAgents();
+  const filtered = agents.filter((a) => a._id !== id);
+  if (filtered.length === agents.length) return false;
+  saveStoredAgents(filtered);
+  return true;
+};
+
 // Properties helpers
 export const getStoredProperties = (): AgentProperty[] => {
   try {

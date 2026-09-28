@@ -457,36 +457,19 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
                   </Button>
                 ) : null}
 
-                {handleSaveDraft && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={loading || imageUploading}
-                    onClick={handleSaveDraft}
-                    className="h-9.5 rounded-xl border-purple-300 dark:border-purple-800 text-purple-700 dark:text-purple-300 bg-purple-50/70 hover:bg-purple-100/90 px-4 text-xs font-bold shadow-xs transition flex items-center gap-1.5"
-                  >
-                    <FileText className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
-                    Save as Draft
-                  </Button>
-                )}
-
                 <Button
                   type="submit"
                   disabled={loading || imageUploading}
-                  className="h-9.5 rounded-xl bg-gradient-to-r from-primary to-rose-600 px-5 text-xs font-bold text-white shadow-md shadow-primary/25 hover:opacity-95 transition"
+                  className="h-9.5 rounded-xl bg-gradient-to-r from-primary via-rose-700 to-rose-600 px-5 text-xs font-bold text-white shadow-md shadow-primary/25 hover:opacity-95 transition"
                 >
                   {loading ? (
                     <>
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Saving...
                     </>
                   ) : editingProperty ? (
-                    editingProperty.status === "draft" ? (
-                      "Publish Property"
-                    ) : (
-                      "Save Changes"
-                    )
+                    "Save Changes"
                   ) : (
-                    "Publish Property"
+                    "Create Property"
                   )}
                 </Button>
               </div>
@@ -502,11 +485,11 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 mb-2">
             <FileText className="h-6 w-6 text-amber-700" />
           </div>
-          <AlertDialogTitle className="text-lg font-black text-slate-950">
-            Unsaved Property Changes
+          <AlertDialogTitle className="text-lg font-black text-slate-950 font-heading">
+            Discard Unsaved Changes?
           </AlertDialogTitle>
           <AlertDialogDescription className="text-xs text-slate-600 leading-relaxed font-medium">
-            You have active edits in this listing. Don't worry, your progress is automatically cached, but would you like to save it to your drafts before leaving?
+            You have unsaved changes in this property form. Are you sure you want to discard your edits and close?
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter className="flex-col sm:flex-row gap-2 mt-4">
@@ -518,31 +501,17 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
           </AlertDialogCancel>
           <Button
             type="button"
-            variant="outline"
+            variant="destructive"
             onClick={() => {
               setShowExitConfirm(false);
               if (onDiscardDraft) onDiscardDraft();
               onOpenChange(false);
               resetForm();
             }}
-            className="rounded-xl text-xs font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200"
+            className="rounded-xl text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white"
           >
             Discard Changes
           </Button>
-          {handleSaveDraft && (
-            <Button
-              type="button"
-              onClick={async () => {
-                setShowExitConfirm(false);
-                await handleSaveDraft();
-                onOpenChange(false);
-                resetForm();
-              }}
-              className="rounded-xl text-xs font-bold bg-purple-700 hover:bg-purple-800 text-white shadow-xs"
-            >
-              Save as Draft & Exit
-            </Button>
-          )}
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
