@@ -313,34 +313,34 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-7">
-      {/* 1. Soft Hero Welcome Header */}
-      <div className="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-br from-white via-slate-50 to-indigo-50/40 p-6 sm:p-7 shadow-xs">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between relative z-10">
+      {/* 1. Executive Hero Welcome Header */}
+      <div className="relative overflow-hidden rounded-3xl border border-slate-200/90 bg-gradient-to-br from-white via-slate-50/80 to-amber-50/30 p-6 sm:p-8 shadow-sm backdrop-blur-sm">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between relative z-10">
           <div>
-            <div className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 border border-indigo-200/80 px-3 py-0.5 text-[11px] font-black text-indigo-900 tracking-wide mb-2 shadow-2xs">
-              <Sparkles className="h-3 w-3 text-indigo-600" />
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 border border-primary/20 px-3 py-1 text-[11px] font-black text-primary tracking-wide mb-2.5 shadow-2xs">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
               {isAgent
                 ? `Agent Workspace • ${currentAgent?.city || "Tamil Nadu"}`
-                : "Real Estate Management Suite"}
+                : "Real Estate Management Suite • Executive CRM"}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-950 font-heading">
               {isAgent
-                ? `Welcome, ${currentAgent?.name || "Agent"}!`
-                : "Executive Overview"}
+                ? `Welcome back, ${currentAgent?.name || "Agent"}!`
+                : "Executive Overview & Insights"}
             </h1>
-            <p className="mt-1 text-xs font-semibold text-slate-600 max-w-xl">
+            <p className="mt-1.5 text-xs sm:text-sm font-semibold text-slate-600 max-w-2xl leading-relaxed">
               {isAgent
                 ? `Here are your assigned properties (${stats?.result?.property || 0} listings) and direct customer inquiries (${stats?.result?.enquiry || 0} leads).`
                 : "Monitor key real estate portfolio metrics, track prospective customer inquiries, and manage listing statuses in real time."}
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button
               variant="outline"
               size="sm"
               onClick={refreshAll}
-              className="h-10 rounded-2xl border-slate-200 bg-white font-bold text-xs text-slate-700 shadow-xs hover:bg-slate-50 transition"
+              className="h-10 rounded-2xl border-slate-200/90 bg-white font-bold text-xs text-slate-700 shadow-xs hover:bg-slate-50 hover:border-slate-300 transition-all"
               title="Refresh statistics and inquiries"
             >
               <RefreshCw
@@ -353,27 +353,28 @@ const Dashboard = () => {
 
             <Button
               asChild
-              className="h-10 rounded-2xl bg-gradient-to-r from-primary to-rose-600 px-4 font-black text-xs text-white shadow-md shadow-primary/20 hover:opacity-95"
+              className="h-10 rounded-2xl bg-gradient-to-r from-primary via-rose-700 to-rose-600 px-5 font-black text-xs text-white shadow-md shadow-primary/25 hover:opacity-95 transition-all"
             >
               <Link to="/properties">
-                Properties Portfolio
+                Portfolio Listings
                 <ArrowUpRight className="ml-1.5 h-3.5 w-3.5 stroke-[3]" />
               </Link>
             </Button>
           </div>
         </div>
 
-        {/* Decorative soft ambient glow */}
-        <div className="absolute -right-12 -top-12 h-44 w-44 rounded-full bg-indigo-200/30 blur-3xl pointer-events-none" />
-        <div className="absolute -left-12 -bottom-12 h-44 w-44 rounded-full bg-rose-200/20 blur-3xl pointer-events-none" />
+        {/* Decorative soft ambient glows */}
+        <div className="absolute -right-12 -top-12 h-52 w-52 rounded-full bg-rose-200/30 blur-3xl pointer-events-none" />
+        <div className="absolute -left-12 -bottom-12 h-52 w-52 rounded-full bg-amber-200/25 blur-3xl pointer-events-none" />
       </div>
 
-      {/* 2. Soft & Unique Metric Cards */}
+      {/* 2. Executive Metric Cards */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Total Properties */}
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-slate-300">
+        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-sky-300/80">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-sky-400 to-blue-600" />
           <div className="flex items-center justify-between mb-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 shadow-2xs group-hover:scale-110 transition-transform">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600 border border-sky-100 shadow-2xs group-hover:scale-110 group-hover:bg-sky-100/70 transition-all">
               <Building className="h-5 w-5 stroke-[2.5]" />
             </div>
             <span className="rounded-full bg-sky-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 border border-sky-200/60 shadow-2xs">
@@ -381,28 +382,29 @@ const Dashboard = () => {
             </span>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-700">
               Total Properties
             </p>
             <div className="flex items-baseline gap-3">
-              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight font-heading">
                 {stats?.result ? stats.result.property : "—"}
               </h3>
-              <span className="text-xs font-bold text-slate-400">
+              <span className="text-xs font-bold text-slate-500">
                 active listings
               </span>
             </div>
           </div>
-          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
             <span>Portfolio Catalog</span>
             <span className="font-bold text-sky-700">Residential & Commercial</span>
           </div>
         </div>
 
         {/* Card 2: Total Enquiries */}
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-slate-300">
+        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-emerald-300/80">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-600" />
           <div className="flex items-center justify-between mb-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-2xs group-hover:scale-110 transition-transform">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 border border-emerald-100 shadow-2xs group-hover:scale-110 group-hover:bg-emerald-100/70 transition-all">
               <MessageCircle className="h-5 w-5 stroke-[2.5]" />
             </div>
             <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-700 border border-emerald-200/60 shadow-2xs">
@@ -410,28 +412,29 @@ const Dashboard = () => {
             </span>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-700">
               Total Enquiries
             </p>
             <div className="flex items-baseline gap-3">
-              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight font-heading">
                 {stats?.result ? stats.result.enquiry : "—"}
               </h3>
-              <span className="text-xs font-bold text-slate-400">
+              <span className="text-xs font-bold text-slate-500">
                 inquiries logged
               </span>
             </div>
           </div>
-          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
             <span>Client Conversion</span>
             <span className="font-bold text-emerald-700">Direct Inquiries</span>
           </div>
         </div>
 
         {/* Card 3: Available Properties */}
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-slate-300">
+        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-indigo-300/80">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-indigo-400 to-violet-600" />
           <div className="flex items-center justify-between mb-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-2xs group-hover:scale-110 transition-transform">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 shadow-2xs group-hover:scale-110 group-hover:bg-indigo-100/70 transition-all">
               <Building2 className="h-5 w-5 stroke-[2.5]" />
             </div>
             <span className="rounded-full bg-indigo-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-indigo-700 border border-indigo-200/60 shadow-2xs">
@@ -439,28 +442,29 @@ const Dashboard = () => {
             </span>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-700">
               Available for Sale
             </p>
             <div className="flex items-baseline gap-3">
-              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight font-heading">
                 {stats?.result ? stats.result.availablePropety : "—"}
               </h3>
-              <span className="text-xs font-bold text-slate-400">
+              <span className="text-xs font-bold text-slate-500">
                 units open
               </span>
             </div>
           </div>
-          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
             <span>Market Inventory</span>
             <span className="font-bold text-indigo-700">Publicly Listed</span>
           </div>
         </div>
 
         {/* Card 4: Sold Properties */}
-        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-md hover:border-slate-300">
+        <div className="group relative overflow-hidden rounded-3xl border border-slate-200/85 bg-white p-6 sm:p-7 pl-7 sm:pl-8 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-rose-300/80">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-rose-500 to-amber-500" />
           <div className="flex items-center justify-between mb-5">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 shadow-2xs group-hover:scale-110 transition-transform">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 shadow-2xs group-hover:scale-110 group-hover:bg-rose-100/70 transition-all">
               <TrendingUp className="h-5 w-5 stroke-[2.5]" />
             </div>
             <span className="rounded-full bg-rose-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-rose-700 border border-rose-200/60 shadow-2xs">
@@ -468,35 +472,35 @@ const Dashboard = () => {
             </span>
           </div>
           <div className="space-y-1.5">
-            <p className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+            <p className="text-xs font-black uppercase tracking-wider text-slate-700">
               Sold Properties
             </p>
             <div className="flex items-baseline gap-3">
-              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight">
+              <h3 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight font-heading">
                 {stats?.result ? stats.result.soldProperty : "—"}
               </h3>
-              <span className="text-xs font-bold text-slate-400">
+              <span className="text-xs font-bold text-slate-500">
                 closed units
               </span>
             </div>
           </div>
-          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500 font-semibold">
+          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-600 font-semibold">
             <span>Success Rate</span>
             <span className="font-bold text-rose-700">Delivered Keys</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Soft, Unique Recent Enquiries Card & Table */}
-      <div className="overflow-hidden rounded-3xl border border-slate-200/85 bg-white shadow-xs">
+      {/* 3. Executive Recent Enquiries Card & Table */}
+      <div className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-xs">
         {/* Table Header with Search & Count */}
-        <div className="flex flex-col gap-3 p-5 sm:p-6 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100">
+        <div className="flex flex-col gap-3 p-5 sm:p-6 sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 bg-slate-50/40">
           <div>
             <div className="flex items-center gap-2.5">
-              <h2 className="text-lg font-black text-slate-950">
-                Recent Enquiries
+              <h2 className="text-xl font-black text-slate-950 font-heading">
+                Recent Client Enquiries
               </h2>
-              <span className="rounded-full bg-slate-100 text-slate-800 text-[11px] font-black px-2.5 py-0.5 border border-slate-200/70">
+              <span className="rounded-full bg-white text-slate-800 text-[11px] font-black px-3 py-0.5 border border-slate-200 shadow-2xs">
                 {enquiries.length} {enquiries.length === 1 ? "Inquiry" : "Inquiries"}
               </span>
             </div>
@@ -506,20 +510,20 @@ const Dashboard = () => {
           </div>
 
           {/* Search bar inside header */}
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
             <input
               type="text"
-              placeholder="Search enquiries..."
+              placeholder="Search enquiries by name, property..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50/70 pl-8.5 pr-3 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-none transition"
+              className="h-10 w-full rounded-full border border-slate-200 bg-white pl-9 pr-8 text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10 transition shadow-2xs"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700"
               >
                 <X className="h-3.5 w-3.5" />
               </button>

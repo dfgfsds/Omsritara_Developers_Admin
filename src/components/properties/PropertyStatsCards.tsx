@@ -43,17 +43,17 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         }`}
       >
         <div className="flex w-full items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
             Total Listings
           </span>
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary transition-transform duration-200 group-hover:scale-110 shadow-xs">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary transition-transform duration-200 group-hover:scale-110 shadow-xs">
             <Building2 className="h-4 w-4 stroke-[2.2]" />
           </div>
         </div>
         <div className="mt-2.5 text-2xl font-black text-slate-950">
           {stats.total}
         </div>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+        <p className="mt-0.5 text-[11px] font-bold text-slate-600">
           Active portfolio
         </p>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-primary to-rose-600 opacity-80" />
@@ -70,7 +70,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         }`}
       >
         <div className="flex w-full items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
             Available
           </span>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-600 transition-transform duration-200 group-hover:scale-110 shadow-xs">
@@ -80,7 +80,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         <div className="mt-2.5 text-2xl font-black text-emerald-700">
           {stats.available}
         </div>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+        <p className="mt-0.5 text-[11px] font-bold text-slate-600">
           Ready for booking
         </p>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-emerald-500 to-teal-500 opacity-80" />
@@ -97,7 +97,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         }`}
       >
         <div className="flex w-full items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
             In Progress
           </span>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600 transition-transform duration-200 group-hover:scale-110 shadow-xs">
@@ -107,7 +107,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         <div className="mt-2.5 text-2xl font-black text-amber-700">
           {stats.underConstruction}
         </div>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+        <p className="mt-0.5 text-[11px] font-bold text-slate-600">
           Under construction
         </p>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-amber-500 to-orange-500 opacity-80" />
@@ -124,7 +124,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         }`}
       >
         <div className="flex w-full items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
             Sold Out
           </span>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-rose-500/10 text-rose-600 transition-transform duration-200 group-hover:scale-110 shadow-xs">
@@ -134,7 +134,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
         <div className="mt-2.5 text-2xl font-black text-rose-700">
           {stats.sold}
         </div>
-        <p className="mt-0.5 text-[11px] font-semibold text-slate-500">
+        <p className="mt-0.5 text-[11px] font-bold text-slate-600">
           Closed deals
         </p>
         <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-rose-500 to-pink-600 opacity-80" />
@@ -143,7 +143,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
       {/* 5. Spotlight / Verified */}
       <div className="col-span-2 sm:col-span-4 lg:col-span-1 flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/90 bg-white p-4 shadow-xs">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-black uppercase tracking-wider text-slate-500">
+          <span className="text-xs font-black uppercase tracking-wider text-slate-800">
             Highlights
           </span>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600 shadow-xs">
@@ -201,7 +201,7 @@ export const PropertyStatsCards: React.FC<PropertyStatsCardsProps> = ({
           </button>
         </div>
 
-        <p className="mt-1 text-[10px] font-medium text-slate-500 text-center">
+        <p className="mt-1 text-[10px] font-bold text-slate-600 text-center">
           1-Click filter highlights
         </p>
       </div>

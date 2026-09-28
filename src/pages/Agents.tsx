@@ -22,6 +22,8 @@ import {
   ExternalLink,
   ChevronRight,
   TrendingUp,
+  UserCheck,
+  UserX,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -53,6 +55,8 @@ import {
   updateStoredAgent,
   softDeleteStoredAgent,
   restoreStoredAgent,
+  deleteStoredAgent,
+  toggleStoredAgentStatus,
   getAgentProperties,
   getAgentEnquiries,
 } from "@/data/mockAgentsData";
@@ -246,97 +250,109 @@ export default function Agents() {
     setIsDeleteOpen(true);
   };
 
-  const handleConfirmSoftDelete = () => {
+  const handleConfirmDelete = () => {
     if (!selectedAgent) return;
-    softDeleteStoredAgent(selectedAgent._id);
+    deleteStoredAgent(selectedAgent._id);
     refreshAgents();
     setIsDeleteOpen(false);
 
     toast({
-      title: "Agent Soft Deleted",
-      description: `${selectedAgent.name} has been marked as inactive. Historical records remain preserved.`,
+      title: "Agent Deleted",
+      description: `${selectedAgent.name} has been permanently deleted from records.`,
+      variant: "destructive",
     });
   };
 
-  const handleRestoreAgent = (agent: Agent) => {
-    restoreStoredAgent(agent._id);
+  const handleToggleStatus = (agent: Agent) => {
+    const updated = toggleStoredAgentStatus(agent._id);
     refreshAgents();
-    toast({
-      title: "Agent Reactivated",
-      description: `${agent.name} is now active and can access their portal.`,
-    });
+    if (updated?.status === "active") {
+      toast({
+        title: "Agent Activated",
+        description: `${agent.name} is now active and can access their portal.`,
+      });
+    } else {
+      toast({
+        title: "Agent Marked Inactive",
+        description: `${agent.name} has been marked as inactive.`,
+      });
+    }
   };
 
   return (
-    <div className="p-6 md:p-8 space-y-8 max-w-7xl mx-auto">
+    <div className="space-y-7 max-w-7xl mx-auto">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tight font-heading">
               Real Estate Agents
             </h1>
-            <Badge className="bg-amber-100 text-amber-800 border-amber-300 font-bold hover:bg-amber-100">
+            <Badge className="bg-amber-100 text-amber-900 border-amber-300 font-extrabold hover:bg-amber-100 shadow-2xs">
               Role: AGENT
             </Badge>
           </div>
-          <p className="text-slate-500 text-sm mt-1">
-            Manage agents, monitor individual property portfolios, and handle permissions.
+          <p className="text-slate-500 text-xs sm:text-sm font-semibold mt-1">
+            Manage agents, monitor individual property portfolios, and handle portal access permissions.
           </p>
         </div>
 
         <Button
           onClick={handleOpenAdd}
-          className="bg-primary hover:bg-primary/95 text-white font-bold rounded-xl shadow-md flex items-center gap-2 px-4 py-2.5 shrink-0"
+          className="bg-gradient-to-r from-primary via-rose-700 to-rose-600 hover:opacity-95 text-white font-black text-xs rounded-2xl shadow-md shadow-primary/25 flex items-center gap-2 px-5 h-11 shrink-0 transition-all"
         >
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 stroke-[3]" />
           <span>Add New Agent</span>
         </Button>
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Agents */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-            <Users className="h-6 w-6" />
+        <div className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-200/85 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-blue-300 flex items-center gap-4">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-blue-400 to-indigo-600" />
+          <div className="h-12 w-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100/70 shadow-2xs group-hover:scale-110 group-hover:bg-blue-100/70 transition-all">
+            <Users className="h-5 w-5 stroke-[2.2]" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Agents</p>
-            <p className="text-2xl font-black text-slate-900 mt-0.5">{metrics.total}</p>
+            <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Total Agents</p>
+            <p className="text-2xl sm:text-3xl font-black text-slate-950 mt-0.5 font-heading">{metrics.total}</p>
           </div>
         </div>
 
         {/* Active Agents */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-6 w-6" />
+        <div className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-200/85 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-emerald-300 flex items-center gap-4">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-emerald-400 to-teal-600" />
+          <div className="h-12 w-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0 border border-emerald-100/70 shadow-2xs group-hover:scale-110 group-hover:bg-emerald-100/70 transition-all">
+            <CheckCircle2 className="h-5 w-5 stroke-[2.5]" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Active Agents</p>
-            <p className="text-2xl font-black text-emerald-700 mt-0.5">{metrics.active}</p>
+            <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Active Agents</p>
+            <p className="text-2xl sm:text-3xl font-black text-emerald-700 mt-0.5 font-heading">{metrics.active}</p>
           </div>
         </div>
 
-        {/* Soft Deleted / Inactive */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
-            <AlertCircle className="h-6 w-6" />
+        {/* Inactive */}
+        <div className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-200/85 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-amber-300 flex items-center gap-4">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-amber-400 to-orange-500" />
+          <div className="h-12 w-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0 border border-amber-100/70 shadow-2xs group-hover:scale-110 group-hover:bg-amber-100/70 transition-all">
+            <AlertCircle className="h-5 w-5 stroke-[2.2]" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Soft Deleted / Inactive</p>
-            <p className="text-2xl font-black text-amber-700 mt-0.5">{metrics.inactive}</p>
+            <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Inactive</p>
+            <p className="text-2xl sm:text-3xl font-black text-amber-700 mt-0.5 font-heading">{metrics.inactive}</p>
           </div>
         </div>
 
         {/* Agent Portfolio Total */}
-        <div className="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
-            <Building2 className="h-6 w-6" />
+        <div className="group relative overflow-hidden bg-white p-5 rounded-3xl border border-slate-200/85 shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:border-purple-300 flex items-center gap-4">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-purple-400 to-pink-500" />
+          <div className="h-12 w-12 rounded-2xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0 border border-purple-100/70 shadow-2xs group-hover:scale-110 group-hover:bg-purple-100/70 transition-all">
+            <Building2 className="h-5 w-5 stroke-[2.2]" />
           </div>
           <div>
-            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Agent Listings</p>
-            <p className="text-2xl font-black text-purple-700 mt-0.5">{metrics.totalListings}</p>
+            <p className="text-xs font-black text-slate-700 uppercase tracking-wider">Agent Listings</p>
+            <p className="text-2xl sm:text-3xl font-black text-purple-700 mt-0.5 font-heading">{metrics.totalListings}</p>
           </div>
         </div>
       </div>
@@ -367,33 +383,30 @@ export default function Agents() {
         <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl w-full md:w-auto self-stretch md:self-auto">
           <button
             onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              statusFilter === "all"
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === "all"
                 ? "bg-white text-slate-900 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             All ({metrics.total})
           </button>
           <button
             onClick={() => setStatusFilter("active")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              statusFilter === "active"
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === "active"
                 ? "bg-white text-emerald-700 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
             Active ({metrics.active})
           </button>
           <button
             onClick={() => setStatusFilter("inactive")}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
-              statusFilter === "inactive"
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${statusFilter === "inactive"
                 ? "bg-white text-amber-700 shadow-sm"
                 : "text-slate-600 hover:text-slate-900"
-            }`}
+              }`}
           >
-            Soft Deleted ({metrics.inactive})
+            Inactive ({metrics.inactive})
           </button>
         </div>
       </div>
@@ -433,11 +446,10 @@ export default function Agents() {
                       <TableCell className="py-4">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`h-10 w-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 shadow-sm ${
-                              isActive
+                            className={`h-10 w-10 rounded-full flex items-center justify-center font-black text-sm shrink-0 shadow-sm ${isActive
                                 ? "bg-gradient-to-tr from-amber-500 to-amber-400 text-white"
                                 : "bg-slate-200 text-slate-500"
-                            }`}
+                              }`}
                           >
                             {agent.name.charAt(0)}
                           </div>
@@ -496,30 +508,33 @@ export default function Agents() {
 
                       {/* Status */}
                       <TableCell className="py-4">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border ${
-                            isActive
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-amber-50 text-amber-700 border-amber-200"
-                          }`}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleStatus(agent)}
+                          title={`Status is ${isActive ? "Active" : "Inactive"}. Click to toggle.`}
+                          className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold border transition-all cursor-pointer hover:scale-105 shadow-2xs ${isActive
+                              ? "bg-emerald-50 text-emerald-800 border-emerald-300 ring-1 ring-emerald-400/25 hover:bg-emerald-100"
+                              : "bg-amber-50 text-amber-800 border-amber-300 ring-1 ring-amber-400/25 hover:bg-amber-100"
+                            }`}
                         >
                           <span
-                            className={`h-1.5 w-1.5 rounded-full ${
-                              isActive ? "bg-emerald-500" : "bg-amber-500"
-                            }`}
+                            className={`h-2 w-2 rounded-full ${isActive
+                                ? "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)] animate-pulse"
+                                : "bg-amber-500"
+                              }`}
                           />
-                          {isActive ? "Active" : "Soft Deleted"}
-                        </span>
+                          {isActive ? "Active" : "Inactive"}
+                        </button>
                       </TableCell>
 
                       {/* Enrolled Date */}
                       <TableCell className="py-4 text-xs text-slate-500 font-medium">
                         {agent.createdAt
                           ? new Date(agent.createdAt).toLocaleDateString("en-IN", {
-                              day: "numeric",
-                              month: "short",
-                              year: "numeric",
-                            })
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })
                           : "-"}
                       </TableCell>
 
@@ -533,7 +548,7 @@ export default function Agents() {
                             size="sm"
                             title="View Agent Details"
                             onClick={() => handleOpenView(agent)}
-                            className="h-8 w-8 p-0 rounded-lg text-slate-600 hover:text-slate-900 border-slate-200"
+                            className="h-8 w-8 p-0 rounded-lg text-slate-600 hover:text-slate-900 border-slate-200 hover:bg-slate-100 shadow-2xs"
                           >
                             <Eye className="h-3.5 w-3.5" />
                           </Button>
@@ -544,33 +559,43 @@ export default function Agents() {
                             size="sm"
                             title="Edit Agent Details"
                             onClick={() => handleOpenEdit(agent)}
-                            className="h-8 w-8 p-0 rounded-lg text-blue-600 hover:text-blue-800 border-slate-200"
+                            className="h-8 w-8 p-0 rounded-lg text-blue-600 hover:text-blue-800 border-slate-200 hover:bg-blue-50 shadow-2xs"
                           >
                             <Edit2 className="h-3.5 w-3.5" />
                           </Button>
 
-                          {/* Soft Delete or Restore */}
-                          {isActive ? (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              title="Soft Delete (Deactivate) Agent"
-                              onClick={() => handleOpenDelete(agent)}
-                              className="h-8 w-8 p-0 rounded-lg text-rose-600 hover:text-rose-800 border-slate-200 hover:bg-rose-50"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              title="Restore Agent"
-                              onClick={() => handleRestoreAgent(agent)}
-                              className="h-8 w-8 p-0 rounded-lg text-emerald-600 hover:text-emerald-800 border-slate-200 hover:bg-emerald-50"
-                            >
-                              <RotateCcw className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
+                          {/* Active / Inactive Status Toggle (Dedicated Button) */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title={
+                              isActive
+                                ? "Active: Click to mark Inactive"
+                                : "Inactive: Click to mark Active"
+                            }
+                            onClick={() => handleToggleStatus(agent)}
+                            className={`h-8 w-8 p-0 rounded-lg border shadow-2xs transition-all ${isActive
+                                ? "text-emerald-700 bg-emerald-50 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-900"
+                                : "text-amber-700 bg-amber-50 border-amber-300 hover:bg-amber-100 hover:text-amber-900"
+                              }`}
+                          >
+                            {isActive ? (
+                              <UserCheck className="h-3.5 w-3.5 stroke-[2.2]" />
+                            ) : (
+                              <UserX className="h-3.5 w-3.5 stroke-[2.2]" />
+                            )}
+                          </Button>
+
+                          {/* Delete Agent (Separate Action) */}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            title="Delete Agent"
+                            onClick={() => handleOpenDelete(agent)}
+                            className="h-8 w-8 p-0 rounded-lg text-rose-600 border-slate-200 hover:bg-rose-50 hover:text-rose-800 hover:border-rose-300 shadow-2xs"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -615,7 +640,7 @@ export default function Agents() {
               <Input
                 required
                 type="email"
-                placeholder="e.g. ramesh.agent@omsritara.com"
+                placeholder="e.g. "
                 value={newAgent.email}
                 onChange={(e) => setNewAgent({ ...newAgent, email: e.target.value })}
                 className="rounded-xl"
@@ -789,7 +814,7 @@ export default function Agents() {
                 className="w-full text-xs h-10 px-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 font-bold"
               >
                 <option value="active">Active (Access Allowed)</option>
-                <option value="inactive">Inactive (Soft Deleted / Suspended)</option>
+                <option value="inactive">Inactive / Suspended</option>
               </select>
             </div>
 
@@ -825,7 +850,7 @@ export default function Agents() {
         </DialogContent>
       </Dialog>
 
-      {/* 3. SOFT DELETE CONFIRMATION MODAL */}
+      {/* 3. DELETE AGENT CONFIRMATION MODAL */}
       <Dialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
         <DialogContent className="max-w-md rounded-2xl p-6">
           <DialogHeader>
@@ -833,29 +858,26 @@ export default function Agents() {
               <Trash2 className="h-6 w-6" />
             </div>
             <DialogTitle className="text-xl font-extrabold text-slate-900">
-              Soft Delete Agent?
+              Delete Agent?
             </DialogTitle>
             <DialogDescription className="text-xs text-slate-600 leading-relaxed mt-1">
-              Are you sure you want to soft delete <strong>{selectedAgent?.name}</strong>?
+              Are you sure you want to permanently delete <strong>{selectedAgent?.name}</strong>?
             </DialogDescription>
           </DialogHeader>
 
-          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 space-y-2 text-xs text-slate-700">
-            <div className="flex items-center gap-2 font-bold text-slate-900">
-              <ShieldCheck className="h-4 w-4 text-emerald-600" />
-              <span>Soft Delete Guarantee</span>
+          <div className="bg-rose-50/70 border border-rose-200 rounded-xl p-3.5 space-y-2 text-xs text-slate-700">
+            <div className="flex items-center gap-2 font-bold text-rose-900">
+              <AlertCircle className="h-4 w-4 text-rose-600" />
+              <span>Permanent Deletion Warning</span>
             </div>
-            <p className="text-[11px] text-slate-500">
-              • The agent’s assigned properties ({selectedAgent?.propertiesCount || 0}) will remain intact.
+            <p className="text-[11px] text-slate-600">
+              • The agent’s portal access and credentials will be permanently deleted.
             </p>
-            <p className="text-[11px] text-slate-500">
-              • All customer leads & enquiries ({selectedAgent?.enquiriesCount || 0}) are kept safely.
+            <p className="text-[11px] text-slate-600">
+              • Assigned properties ({selectedAgent?.propertiesCount || 0}) and customer enquiries ({selectedAgent?.enquiriesCount || 0}) will be safely unassigned.
             </p>
-            <p className="text-[11px] text-slate-500">
-              • The agent will be marked as <strong>Inactive</strong> and prevented from logging in.
-            </p>
-            <p className="text-[11px] text-slate-500">
-              • You can reactivate this agent anytime with 1 click.
+            <p className="text-[11px] text-rose-700 font-bold">
+              • This action cannot be undone.
             </p>
           </div>
 
@@ -864,16 +886,16 @@ export default function Agents() {
               type="button"
               variant="outline"
               onClick={() => setIsDeleteOpen(false)}
-              className="rounded-xl"
+              className="rounded-xl font-bold"
             >
               Cancel
             </Button>
             <Button
               type="button"
-              onClick={handleConfirmSoftDelete}
-              className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl"
+              onClick={handleConfirmDelete}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl shadow-xs"
             >
-              Confirm Soft Delete
+              Delete Agent
             </Button>
           </div>
         </DialogContent>
@@ -900,7 +922,7 @@ export default function Agents() {
                           : "bg-amber-100 text-amber-800 border-amber-300"
                       }
                     >
-                      {selectedAgent?.status === "active" ? "Active" : "Soft Deleted"}
+                      {selectedAgent?.status === "active" ? "Active" : "Inactive"}
                     </Badge>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
@@ -986,13 +1008,12 @@ export default function Agents() {
                     <div className="text-right">
                       <p className="text-xs font-black text-slate-900">{prop.price}</p>
                       <span
-                        className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mt-0.5 ${
-                          prop.status === "available"
+                        className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full inline-block mt-0.5 ${prop.status === "available"
                             ? "bg-emerald-100 text-emerald-800"
                             : prop.status === "under_construction"
-                            ? "bg-amber-100 text-amber-800"
-                            : "bg-slate-100 text-slate-700"
-                        }`}
+                              ? "bg-amber-100 text-amber-800"
+                              : "bg-slate-100 text-slate-700"
+                          }`}
                       >
                         {prop.status.replace("_", " ")}
                       </span>
@@ -1023,24 +1044,22 @@ export default function Agents() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span
-                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                            enq.priority === "High"
+                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${enq.priority === "High"
                               ? "bg-rose-100 text-rose-800"
                               : enq.priority === "Medium"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-slate-100 text-slate-700"
-                          }`}
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
                         >
                           {enq.priority}
                         </span>
                         <span
-                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                            enq.status === "New"
+                          className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${enq.status === "New"
                               ? "bg-sky-100 text-sky-800"
                               : enq.status === "In Progress"
-                              ? "bg-amber-100 text-amber-800"
-                              : "bg-emerald-100 text-emerald-800"
-                          }`}
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-800"
+                            }`}
                         >
                           {enq.status}
                         </span>
