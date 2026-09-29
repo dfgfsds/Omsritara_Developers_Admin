@@ -2,7 +2,7 @@
 import { createContext, useContext, useState, ReactNode, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import axiosInstance from "@/lib/axiosInstance";
-import { getStoredAgents, Agent } from "@/data/mockAgentsData";
+import { Agent } from "@/data/mockAgentsData";
 
 export type UserRole = "admin" | "agent" | "user";
 
@@ -72,133 +72,89 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Current agent details if logged in as agent
     const currentAgent: Agent | null = useMemo(() => {
         if (!isAgent) return null;
-        const agents = getStoredAgents();
-        if (currentAgentId) {
-            const found = agents.find((a) => a._id === currentAgentId);
-            if (found) return found;
+        if (userData) {
+            return {
+                _id: userData._id || currentAgentId || "agent_user",
+                name: userData.name || "Agent",
+                email: userData.email || "",
+                mobile: userData.mobile || "",
+                city: userData.city || "Chennai",
+                status: "active",
+                role: {
+                    _id: typeof userData.role === "object" ? userData.role?._id || "role_agent" : "role_agent",
+                    name: "agent",
+                },
+                propertiesCount: userData.propertiesCount || 0,
+                enquiriesCount: userData.enquiriesCount || 0,
+                createdAt: userData.createdAt || new Date().toISOString(),
+            };
         }
-        if (userData?.email) {
-            const found = agents.find(
-                (a) => a.email.toLowerCase() === String(userData.email).toLowerCase()
-            );
-            if (found) return found;
-        }
-        return agents[0] || null;
+        return null;
     }, [isAgent, currentAgentId, userData]);
 
     const login = async (email: string, password: string): Promise<LoginResult> => {
         const cleanEmail = email.trim().toLowerCase();
         const cleanPass = password.trim();
 
-        // 1. Check if matching an AGENT account (from mock/stored agents)
-        const agents = getStoredAgents();
-        const matchedAgent = agents.find(
-            (a) => a.email.toLowerCase() === cleanEmail
-        );
-
-        if (matchedAgent) {
-            // Check soft-delete status first
-            if (matchedAgent.status === "inactive") {
-                throw new Error(
-                    `Agent account (${matchedAgent.name}) has been deactivated / soft-deleted by Administrator.`
-                );
-            }
-
-            // Verify password
-            const validPassword = matchedAgent.password || "agent123";
-            if (cleanPass !== validPassword && cleanPass !== "agent123") {
-                throw new Error("Invalid password for agent account.");
-            }
-
-            const agentUser = {
-                _id: matchedAgent._id,
-                name: matchedAgent.name,
-                email: matchedAgent.email,
-                mobile: matchedAgent.mobile,
-                role: "agent",
-                city: matchedAgent.city,
-            };
-
-            const agentToken = `mock_agent_token_${matchedAgent._id}`;
-            setToken(agentToken);
-            setUserData(agentUser);
-            setStoredRole("agent");
-            setCurrentAgentId(matchedAgent._id);
-
-            localStorage.setItem("token", agentToken);
-            localStorage.setItem("user", JSON.stringify(agentUser));
-            localStorage.setItem("ost_user_role", "agent");
-            localStorage.setItem("ost_agent_id", matchedAgent._id);
-            localStorage.removeItem("ost_simulated_role");
-
-            navigate("/dashboard");
-            return { role: "agent", name: matchedAgent.name };
-        }
-
-        // 2. Otherwise authenticate via backend /signin/ (Admin or User)
+        // Authenticate via backend /signin
         try {
-            const res = await axiosInstance.post("/signin/", {
+            const res = await axiosInstance.post("/signin", {
                 email: cleanEmail,
                 password: cleanPass,
             });
 
-            const userToken = res.data?.result?.tokens?.accessToken;
+            const userTokens = res.data?.result?.tokens;
+            const accessToken = userTokens?.accessToken;
+            const refreshToken = userTokens?.refreshToken;
             const userDetails = res.data?.result?.user;
-            if (!userToken) throw new Error("No token returned from server");
+
+            if (!accessToken) throw new Error("No access token returned from server");
             if (!userDetails) throw new Error("No user details returned from server");
 
-            const rawRole = typeof userDetails.role === "object" ? userDetails.role?.name : userDetails.role;
-            const norm = String(rawRole || "").toLowerCase();
+            // Extract roleType: "ADMIN" | "AGENT"
+            const rawRoleType = String(
+                userDetails.roleType ||
+                (typeof userDetails.role === "object" ? userDetails.role?.name : userDetails.role) ||
+                ""
+            ).toUpperCase();
 
-            let detectedRole: UserRole = "admin";
-            if (norm.includes("agent")) detectedRole = "agent";
-            else if (norm.includes("user")) detectedRole = "user";
+            const detectedRole: UserRole = rawRoleType.includes("AGENT") ? "agent" : "admin";
 
-            setToken(userToken);
+            setToken(accessToken);
             setUserData(userDetails);
             setStoredRole(detectedRole);
-            setCurrentAgentId(null);
+            setCurrentAgentId(detectedRole === "agent" ? userDetails._id : null);
 
+            localStorage.setItem("token", accessToken);
+            localStorage.setItem("accessToken", accessToken);
+            if (refreshToken) {
+                localStorage.setItem("refreshToken", refreshToken);
+            }
             localStorage.setItem("user", JSON.stringify(userDetails));
-            localStorage.setItem("token", userToken);
             localStorage.setItem("ost_user_role", detectedRole);
-            localStorage.removeItem("ost_agent_id");
+            localStorage.setItem("roleType", detectedRole === "agent" ? "AGENT" : "ADMIN");
+            if (detectedRole === "agent") {
+                localStorage.setItem("ost_agent_id", userDetails._id);
+            } else {
+                localStorage.removeItem("ost_agent_id");
+            }
             localStorage.removeItem("ost_simulated_role");
 
-            navigate("/dashboard");
-            return { role: detectedRole, name: userDetails.name || "Administrator" };
-        } catch (err: any) {
-            // 3. Fallback for offline / demo admin testing if backend is down or unreachable
-            if (
-                cleanEmail === "admin@omsritara.com" ||
-                cleanEmail === "admin@omsritaradevelopers.com"
-            ) {
-                if (cleanPass === "admin" || cleanPass === "admin123" || cleanPass === "admin@123") {
-                    const fallbackAdmin = {
-                        _id: "admin_001",
-                        name: "Super Administrator",
-                        email: cleanEmail,
-                        role: "admin",
-                    };
-                    const fallbackToken = "mock_admin_token_" + Date.now();
-
-                    setToken(fallbackToken);
-                    setUserData(fallbackAdmin);
-                    setStoredRole("admin");
-                    setCurrentAgentId(null);
-
-                    localStorage.setItem("token", fallbackToken);
-                    localStorage.setItem("user", JSON.stringify(fallbackAdmin));
-                    localStorage.setItem("ost_user_role", "admin");
-                    localStorage.removeItem("ost_agent_id");
-                    localStorage.removeItem("ost_simulated_role");
-
-                    navigate("/dashboard");
-                    return { role: "admin", name: fallbackAdmin.name };
-                }
+            // Redirect based on role
+            if (detectedRole === "agent") {
+                navigate("/agent/dashboard");
+            } else {
+                navigate("/dashboard");
             }
 
-            throw new Error(err.response?.data?.msg || err.message || "Invalid credentials. Please verify your email and password.");
+            return { role: detectedRole, name: userDetails.name || (detectedRole === "agent" ? "Agent" : "Administrator") };
+        } catch (err: any) {
+            const errorMsg =
+                err.response?.data?.msg ||
+                err.response?.data?.message ||
+                err.message ||
+                "Login failed. Please check your credentials.";
+            throw new Error(errorMsg);
         }
     };
 
@@ -209,8 +165,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setCurrentAgentId(null);
 
         localStorage.removeItem("token");
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
         localStorage.removeItem("user");
         localStorage.removeItem("ost_user_role");
+        localStorage.removeItem("roleType");
         localStorage.removeItem("ost_agent_id");
         localStorage.removeItem("ost_simulated_role");
         localStorage.removeItem("ost_selected_agent_id");

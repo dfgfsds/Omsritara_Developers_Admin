@@ -39,11 +39,6 @@ import {
 } from "@/components/ui/dialog";
 import axiosInstance from "@/lib/axiosInstance";
 import { useAuth } from "@/context/AuthContext";
-import {
-  getAgentProperties,
-  getAgentEnquiries,
-  updateAgentEnquiryStatus,
-} from "@/data/mockAgentsData";
 
 // Soft, harmonious status badge colors
 const getStatusBadgeStyles = (status: string) => {
@@ -126,62 +121,111 @@ const Dashboard = () => {
   };
 
   const fetchEnquiries = async () => {
-    if (isAgent && currentAgent) {
-      const agentEnqs = getAgentEnquiries(currentAgent._id);
-      const formatted = agentEnqs.map((item: any) => ({
-        id: item._id,
-        name: item.name,
-        email: item.email,
-        mobile: item.mobile,
-        propertyId: item.propertyId || "-",
-        propertyName: item.propertyName || "-",
-        message: item.message || "No message",
-        status: formatStatus(item.status),
-        priority: formatPriority(item.priority),
-        source: "Agent Lead",
-        createdAt: item.createdAt,
-        followUpDate: null,
-      }));
-      setEnquiries(formatted);
-      return;
-    }
-
     try {
       const res = await axiosInstance.get("/enquiry");
-      if (res.data?.result) {
-        const formatted = res.data.result.map((item: any) => ({
+      const list =
+        res.data?.result ||
+        res.data?.data ||
+        (Array.isArray(res.data) ? res.data : []);
+      const allEnqs = Array.isArray(list) ? list : [];
+
+      const filteredEnqs =
+        isAgent && currentAgent
+          ? allEnqs.filter((e: any) => {
+              const propObj = Array.isArray(e.property) ? e.property[0] : e.property;
+              const ownerId =
+                propObj?.created_by?._id ||
+                propObj?.created_by ||
+                e.created_by?._id ||
+                e.created_by;
+              const agentId = e.agent?._id || e.agent;
+              return (
+                String(ownerId) === String(currentAgent._id) ||
+                String(agentId) === String(currentAgent._id)
+              );
+            })
+          : allEnqs;
+
+      const formatted = filteredEnqs.map((item: any) => {
+        const prop = Array.isArray(item.property) ? item.property[0] : item.property;
+        return {
           id: item._id,
           name: item.name,
           email: item.email,
           mobile: item.mobile,
-          propertyId: item.property?.[0]?._id || "-",
-          propertyName: item.property?.[0]?.name || "-",
-          message: item.property?.[0]?.description || "No message",
+          propertyId: prop?._id || "-",
+          propertyName: prop?.name || item.propertyName || "General Inquiry",
+          message: item.description || item.message || "No message",
           status: formatStatus(item.status),
           priority: formatPriority(item.priority),
           source: "API",
           createdAt: item.createdAt,
           followUpDate: item.followUpDate || null,
-        }));
-        setEnquiries(formatted);
-      }
+        };
+      });
+      setEnquiries(formatted);
     } catch (error) {
       console.error("Error fetching enquiries:", error);
+      setEnquiries([]);
     }
   };
 
   const fetchStats = async () => {
     if (isAgent && currentAgent) {
-      const agentProps = getAgentProperties(currentAgent._id);
-      const agentEnqs = getAgentEnquiries(currentAgent._id);
-      setStats({
-        result: {
-          property: agentProps.length,
-          enquiry: agentEnqs.length,
-          available: agentProps.filter((p) => p.status === "available").length,
-          sold: agentProps.filter((p) => p.status === "sold").length,
-        },
-      });
+      try {
+        const [propRes, enqRes] = await Promise.allSettled([
+          axiosInstance.get("/property", {
+            params: { created_by: currentAgent._id },
+          }),
+          axiosInstance.get("/enquiry"),
+        ]);
+
+        const rawProps =
+          propRes.status === "fulfilled"
+            ? propRes.value?.data?.result ||
+              propRes.value?.data?.data ||
+              propRes.value?.data ||
+              []
+            : [];
+        const allProps = Array.isArray(rawProps) ? rawProps : [];
+        const myProps = allProps.filter((p: any) => {
+          const ownerId = p.created_by?._id || p.created_by;
+          return String(ownerId) === String(currentAgent._id);
+        });
+
+        const rawEnqs =
+          enqRes.status === "fulfilled"
+            ? enqRes.value?.data?.result ||
+              enqRes.value?.data?.data ||
+              enqRes.value?.data ||
+              []
+            : [];
+        const allEnqs = Array.isArray(rawEnqs) ? rawEnqs : [];
+        const myEnqs = allEnqs.filter((e: any) => {
+          const propObj = Array.isArray(e.property) ? e.property[0] : e.property;
+          const ownerId =
+            propObj?.created_by?._id ||
+            propObj?.created_by ||
+            e.created_by?._id ||
+            e.created_by;
+          const agentId = e.agent?._id || e.agent;
+          return (
+            String(ownerId) === String(currentAgent._id) ||
+            String(agentId) === String(currentAgent._id)
+          );
+        });
+
+        setStats({
+          result: {
+            property: myProps.length,
+            enquiry: myEnqs.length,
+            available: myProps.filter((p: any) => p.status === "available").length,
+            sold: myProps.filter((p: any) => p.status === "sold").length,
+          },
+        });
+      } catch (error) {
+        console.error("Error fetching agent stats:", error);
+      }
       return;
     }
 

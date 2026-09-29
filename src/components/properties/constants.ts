@@ -44,6 +44,7 @@ export const emptyFormData: PropertyFormData = {
   status: "available",
   isFeatured: false,
   isVerified: false,
+  agent_id: "",
 };
 
 export const NEARBY_PRESETS = [

@@ -10,6 +10,7 @@ import {
   Sparkles,
   Layers,
   UploadCloud,
+  User,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Property } from "./types";
@@ -169,16 +170,25 @@ export const PropertyCard: React.FC<PropertyCardProps> = ({
           </div>
         </div>
 
-        {/* Location */}
-        <div className="mt-1 mb-2.5 flex items-center gap-1.5 text-xs text-slate-600">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
-          <span className="truncate">
-            {[property.location?.area, property.location?.city]
-              .filter(Boolean)
-              .join(", ") ||
-              property.location?.address ||
-              "Prime Location, Chennai"}
-          </span>
+        {/* Location & Agent Badge */}
+        <div className="mt-1 mb-2.5 flex items-center justify-between gap-1.5 text-xs text-slate-600">
+          <div className="flex items-center gap-1.5 truncate">
+            <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+            <span className="truncate">
+              {[property.location?.area, property.location?.city]
+                .filter(Boolean)
+                .join(", ") ||
+                property.location?.address ||
+                "Prime Location, Chennai"}
+            </span>
+          </div>
+
+          {property.created_by?.name && (
+            <span className="inline-flex shrink-0 items-center gap-1 px-1.5 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200/80 text-[9px] font-bold">
+              <User className="h-2.5 w-2.5 text-amber-600" />
+              {property.created_by.name}
+            </span>
+          )}
         </div>
 
         {/* Quick Specs Compact Row */}

@@ -44,7 +44,6 @@ import {
   StoredPropertyDraft,
 } from "@/utils/propertyDraftStorage";
 import { useAuth } from "@/context/AuthContext";
-import { getAgentProperties } from "@/data/mockAgentsData";
 
 const propertyStatusCycle: Record<
   string,
@@ -303,41 +302,22 @@ const Properties = () => {
   };
 
   const fetchProperties = async () => {
-    if (isAgent && currentAgent) {
-      setLoading(true);
-      const agentProps = getAgentProperties(currentAgent._id);
-      const mappedProps: Property[] = agentProps.map((p) => ({
-        _id: p._id,
-        name: p.name,
-        type: { name: p.type },
-        location: { address: p.location, city: p.location.split(",").pop()?.trim() || "Chennai" },
-        status: p.status,
-        price: parseInt(p.price.replace(/[^\d]/g, "")) || 1000000,
-        image_url: p.image ? [p.image] : [],
-        isFeatured: true,
-        isVerified: true,
-        createdAt: p.createdAt,
-      }));
-      setProperties(mappedProps);
-      setStats({
-        total: mappedProps.length,
-        available: mappedProps.filter((p) => p.status === "available").length,
-        underConstruction: mappedProps.filter((p) => p.status === "under_construction").length,
-        sold: mappedProps.filter((p) => p.status === "sold").length,
-        featured: mappedProps.length,
-        verified: mappedProps.length,
-        draft: 0,
-      });
-      setLoading(false);
-      return;
-    }
-
     try {
       setLoading(true);
-      const response = await axiosInstance.get("/property");
+      const agentId = isAgent && currentAgent ? currentAgent._id : undefined;
+      const response = await axiosInstance.get("/property", {
+        params: agentId ? { created_by: agentId } : undefined,
+      });
       const result =
         response?.data?.result || response?.data?.data || response?.data;
-      setProperties(Array.isArray(result) ? result : []);
+      const allProps = Array.isArray(result) ? result : [];
+      const scopedProps = agentId
+        ? allProps.filter((p: any) => {
+            const ownerId = p.created_by?._id || p.created_by;
+            return String(ownerId) === String(agentId);
+          })
+        : allProps;
+      setProperties(scopedProps);
     } catch (error: any) {
       showMessage(
         "error",
