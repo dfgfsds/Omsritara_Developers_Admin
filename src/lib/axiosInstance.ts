@@ -4,9 +4,6 @@ const API_BASE_URL = "https://api.omsritaradevelopers.in";
 
 const axiosInstance = axios.create({
     baseURL: API_BASE_URL,
-    headers: {
-        "Content-Type": "application/json",
-    },
 });
 
 // Attach token to outgoing requests
@@ -15,12 +12,11 @@ axiosInstance.interceptors.request.use(
         const token = localStorage.getItem("token");
 
         if (token) {
-            config.headers.Authorization = `Bearer ${token}`;
-        }
-
-        // When sending FormData, delete Content-Type to let browser set boundary automatically
-        if (config.data instanceof FormData) {
-            delete config.headers["Content-Type"];
+            if (config.headers && typeof config.headers.set === 'function') {
+                config.headers.set('Authorization', `Bearer ${token}`);
+            } else {
+                config.headers.Authorization = `Bearer ${token}`;
+            }
         }
 
         return config;

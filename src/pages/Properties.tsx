@@ -2174,7 +2174,13 @@ import {
   CloudOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+// import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import {
   Property,
@@ -2205,7 +2211,7 @@ import {
   StoredPropertyDraft,
 } from "@/utils/propertyDraftStorage";
 import { useAuth } from "@/context/AuthContext";
-import { getAgentProperties } from "@/data/mockAgentsData";
+// import { getAgentProperties } from "@/data/mockAgentsData";
 
 const propertyStatusCycle: Record<
   string,
@@ -2219,7 +2225,7 @@ const propertyStatusCycle: Record<
 const str = (v: any) => (v !== undefined && v !== null ? String(v) : "");
 
 const Properties = () => {
-  const { role, isAgent, isAdmin, currentAgent } = useAuth();
+  const { isAgent, isAdmin, currentAgent } = useAuth();
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
@@ -2354,6 +2360,108 @@ const Properties = () => {
     }
   };
 
+const fetchProperties = async (draftMode = isDraftView) => {
+  try {
+
+
+    setLoading(true);
+
+    const url = draftMode
+      ? "/property?status=draft"
+      : "/property";
+
+    console.log("=================================");
+    console.log("FETCH PROPERTIES");
+    console.log("Role:", isAdmin ? "ADMIN" : isAgent ? "AGENT" : "UNKNOWN");
+    console.log("User ID:", currentAgent?._id);
+    console.log("URL:", url);
+    console.log("=================================");
+
+    const response = await axiosInstance.get(url, {
+      
+      params: {
+        _t: Date.now(),
+      },
+    });
+
+    const result =
+      response?.data?.result ??
+      response?.data?.data ??
+      response?.data ??
+      [];
+
+    const propertyList: Property[] = Array.isArray(result)
+      ? result
+      : [];
+
+    console.log("PROPERTIES RECEIVED:", propertyList.length);
+
+    console.table(
+      propertyList.map((property: any) => ({
+        id: property?._id,
+        name: property?.name,
+        status: property?.status,
+        createdBy:
+          property?.created_by?._id ||
+          property?.created_by?.id ||
+          property?.created_by ||
+          "N/A",
+        createdByName: property?.created_by?.name || "N/A",
+      }))
+    );
+
+    setProperties(propertyList);
+
+    // Agent stats are calculated only from
+    // the properties returned by backend.
+    if (isAgent) {
+      setStats({
+        total: propertyList.length,
+
+        available: propertyList.filter(
+          (property) => property.status === "available"
+        ).length,
+
+        underConstruction: propertyList.filter(
+          (property) => property.status === "under_construction"
+        ).length,
+
+        sold: propertyList.filter(
+          (property) => property.status === "sold"
+        ).length,
+
+        featured: propertyList.filter(
+          (property) => Boolean(property.isFeatured)
+        ).length,
+
+        verified: propertyList.filter(
+          (property) => Boolean(property.isVerified)
+        ).length,
+
+        draft: 0,
+      });
+    }
+  } catch (error: any) {
+    console.error(
+      "FETCH PROPERTIES ERROR:",
+      error?.response?.data || error
+    );
+
+    showMessage(
+      "error",
+      "Properties Error",
+      getErrorMessage(
+        error,
+        "Failed to fetch properties."
+      )
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
   const fetchAmenities = async () => {
     try {
       const response = await axiosInstance.get("/amenitiestype");
@@ -2463,6 +2571,8 @@ const Properties = () => {
     }
   };
 
+<<<<<<< HEAD
+=======
   const fetchProperties = async () => {
     if (isAgent && currentAgent) {
       setLoading(true);
@@ -2509,6 +2619,7 @@ const Properties = () => {
       setLoading(false);
     }
   };
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
 
   const fetchPropertyStats = async () => {
     if (isAgent) return; // Handled directly in fetchProperties for agent
@@ -2544,6 +2655,13 @@ const Properties = () => {
     fetchProperties();
   }, [isAgent, currentAgent?._id]);
 
+<<<<<<< HEAD
+  useEffect(() => {
+    fetchProperties(isDraftView);
+  }, [isDraftView, isAgent, isAdmin, currentAgent?._id]);
+
+=======
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
   const resetAmenitySelector = () => {
     setSelectedAmenity("");
     setSelectedAmenityTypes([]);
@@ -2987,32 +3105,103 @@ const Properties = () => {
 
   // Real-time Local Storage Auto-Save (800ms debounce)
   useEffect(() => {
-    if (!open) return;
-    if (!hasUnsavedChanges) return;
+  if (!open) return;
+  if (!hasUnsavedChanges) return;
 
-    const draftId = editingProperty?._id || "new";
-    const timer = setTimeout(() => {
-      const saved = saveLocalDraft(draftId, {
-        propertyId: editingProperty?._id || null,
-        editingProperty,
-        formData,
-        formActiveTab,
-        name: formData.name,
-      });
+  // Agent should not auto-create server drafts.
+  // Draft functionality is Admin-only.
+  if (isAgent) return;
 
-      if (saved) {
-        setLastSavedTime(formatDraftTime(saved.timestamp));
-        if (!navigator.onLine) {
-          setAutoSaveStatus("local");
-        } else if (autoSaveStatus !== "saving") {
-          setAutoSaveStatus("saved");
+  if (!navigator.onLine) return;
+
+  // Do not downgrade a live property to draft on backend automatically
+  if (editingProperty && editingProperty.status !== "draft") return;
+
+  // Require minimal content before syncing to backend
+  if (!formData.name?.trim() && !formData.type) return;
+
+  const timer = setTimeout(async () => {
+    try {
+      setAutoSaveStatus("saving");
+
+      const draftPayload = buildDraftDataPayload();
+
+      if (editingProperty?._id) {
+        await axiosInstance.put(
+          `/property/${editingProperty._id}`,
+          draftPayload
+        );
+
+        setAutoSaveStatus("saved");
+        setLastSavedTime(formatDraftTime(Date.now()));
+      } else {
+        const response = await axiosInstance.post(
+          "/property",
+          draftPayload
+        );
+
+        const created =
+          response?.data?.result ||
+          response?.data?.data ||
+          response?.data;
+
+        if (created?._id) {
+          setEditingProperty(created);
+
+          removeLocalDraft("new");
+
+          saveLocalDraft(created._id, {
+            propertyId: created._id,
+            editingProperty: created,
+            formData,
+            formActiveTab,
+            name: formData.name,
+          });
         }
+
+        setAutoSaveStatus("saved");
+        setLastSavedTime(formatDraftTime(Date.now()));
+
+        fetchPropertyStats();
       }
-    }, 800);
+    } catch (err) {
+      console.warn(
+        "Silent server draft sync failed, saved locally:",
+        err
+      );
 
-    return () => clearTimeout(timer);
-  }, [open, formData, formActiveTab, editingProperty, hasUnsavedChanges]);
+      setAutoSaveStatus("local");
+    }
+  }, 3500);
 
+<<<<<<< HEAD
+  return () => clearTimeout(timer);
+}, [
+  open,
+  formData,
+  formActiveTab,
+  editingProperty,
+  hasUnsavedChanges,
+  isAgent,
+]);
+
+  // Check for pending active draft when outside the dialog
+  useEffect(() => {
+    const checkPendingDraft = () => {
+      if (open) return;
+      const latest = getLatestActiveDraft();
+      if (latest && isFormDirtyOrHasContent(latest.formData)) {
+        setPendingGlobalDraft(latest);
+      } else {
+        setPendingGlobalDraft(null);
+      }
+    };
+
+    checkPendingDraft();
+    window.addEventListener("focus", checkPendingDraft);
+    return () => window.removeEventListener("focus", checkPendingDraft);
+  }, [open]);
+=======
 
   // Clean up legacy local draft storage on mount so user is never prompted with stale drafts
   useEffect(() => {
@@ -3033,6 +3222,7 @@ const Properties = () => {
       // Ignore
     }
   }, []);
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
 
   // Online / Offline & BeforeUnload listeners
   useEffect(() => {
@@ -3570,6 +3760,13 @@ const Properties = () => {
         isVerified: formData.isVerified,
       };
 
+<<<<<<< HEAD
+  if (editingProperty?._id) {
+  if (editingProperty.status === "draft") {
+    if (!isAdmin) {
+      showMessage("error", "Access Denied", "Only Admin can publish draft properties.");
+      return;
+=======
       if (editingProperty?._id) {
         const targetId = editingProperty._id;
         try {
@@ -3656,14 +3853,90 @@ const Properties = () => {
       );
     } finally {
       setLoading(false);
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
     }
-  };
+    await axiosInstance.put(`/property/${editingProperty._id}/publish`, propertyData);
+    removeLocalDraft(editingProperty._id);
+    setIsRestoredDraft(false);
+    setPendingGlobalDraft(null);
+    setOpen(false);
+    resetForm();
+    showMessage("success", "Property Published", "Draft property is now live and published successfully.");
+  } else {
+    // normal update for a non-draft property
+    await axiosInstance.put(`/property/${editingProperty._id}`, propertyData);
+    setOpen(false);
+    resetForm();
+    showMessage("success", "Property Updated", "Property updated successfully.");
+  }
+} else {
+  // create new property
+  await axiosInstance.post("/property", propertyData);
+  setOpen(false);
+  resetForm();
+  showMessage("success", "Property Created", "Property created successfully.");
+}
 
-  const handleSaveDraft = async () => {
-    try {
-      setLoading(true);
-      const draftData = buildDraftDataPayload();
+await fetchProperties(isDraftView);
+await fetchPropertyStats();
 
+<<<<<<< HEAD
+} catch (error: any) {
+  showMessage("error", "Save Failed", getErrorMessage(error, "Failed to save property."));
+} finally {
+  setLoading(false);
+}
+};   // <-- handleSubmit closes here properly 
+    
+     
+
+const handleSaveDraft = async () => {
+  // Agent cannot create or save drafts
+  if (isAgent) {
+    showMessage(
+      "error",
+      "Access Denied",
+      "Agents cannot create or save property drafts."
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    const draftData = buildDraftDataPayload();
+
+    if (editingProperty?._id) {
+      await axiosInstance.put(
+        `/property/${editingProperty._id}`,
+        draftData
+      );
+
+      removeLocalDraft(editingProperty._id);
+      setIsRestoredDraft(false);
+      setPendingGlobalDraft(null);
+      setOpen(false);
+      resetForm();
+
+      showMessage(
+        "success",
+        "Draft Updated",
+        "Property draft updated successfully."
+      );
+    } else {
+      await axiosInstance.post("/property", draftData);
+
+      removeLocalDraft("new");
+      setIsRestoredDraft(false);
+      setPendingGlobalDraft(null);
+      setOpen(false);
+      resetForm();
+
+      showMessage(
+        "success",
+        "Draft Saved",
+        "Property saved as draft successfully."
+=======
       if (editingProperty?._id) {
         const targetId = editingProperty._id;
         try {
@@ -3729,66 +4002,102 @@ const Properties = () => {
           error,
           "Something went wrong while saving the property draft."
         )
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
       );
-    } finally {
-      setLoading(false);
     }
-  };
 
-  const handlePublishDraft = async (property: Property) => {
-    const hasType =
-      property.type &&
-      (typeof property.type === "object"
-        ? property.type._id
-        : property.type);
+    await fetchProperties(isDraftView);
+    await fetchPropertyStats();
 
-    const hasName =
-      property.name &&
-      property.name.trim() !== "" &&
-      property.name !== "Untitled Draft";
+  } catch (error: any) {
+    showMessage(
+      "error",
+      "Save Draft Failed",
+      getErrorMessage(
+        error,
+        "Something went wrong while saving the property draft."
+      )
+    );
+  } finally {
+    setLoading(false);
+  }
+};
 
-    if (!hasType || !hasName) {
-      await handleEdit(property);
+
+const handlePublishDraft = async (propertyId: string) => {
+  try {
+    if (!isAdmin) {
       showMessage(
         "error",
-        "Details Required",
-        "Please provide a property title and category type before publishing."
+        "Access Denied",
+        "Only Admin can publish draft properties."
       );
       return;
     }
 
-    try {
-      setLoading(true);
-      const cleanNearbyPlaces = Array.isArray(property.nearby_places)
-        ? property.nearby_places
-            .filter((p) => p && p.name && p.name.trim() !== "")
-            .map((p) => ({
-              name: p.name.trim(),
-              type: p.type || "Landmark",
-              distance:
-                p.distance !== null &&
-                p.distance !== undefined &&
-                (p.distance as any) !== "" &&
-                !isNaN(Number(p.distance))
-                  ? Number(p.distance)
-                  : undefined,
-              distance_unit: p.distance_unit || "km",
-            }))
-        : [];
+    setLoading(true);
 
-      await axiosInstance.put(`/property/${property._id}/publish`, {
-        status: "available",
-        nearby_places: cleanNearbyPlaces,
-      });
-      removeLocalDraft(property._id);
-      setIsRestoredDraft(false);
+    const response = await axiosInstance.put(
+      `/property/publish/${propertyId}`,
+      {}
+    );
 
-      showMessage(
-        "success",
-        "Property Published",
-        `"${property.name}" is now live and published successfully.`
-      );
+    console.log("PUBLISH PROPERTY RESPONSE:", response.data);
 
+<<<<<<< HEAD
+    showMessage(
+      "success",
+      "Property Published",
+      response?.data?.msg || "Property published successfully."
+    );
+
+    // Refresh property list
+    await fetchProperties(isDraftView);
+  } catch (error: any) {
+    console.error(
+      "PUBLISH PROPERTY ERROR:",
+      error?.response?.data || error
+    );
+
+    showMessage(
+      "error",
+      "Publish Failed",
+      error?.response?.data?.msg ||
+        "Failed to publish property."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+const confirmDelete = async () => {
+  if (!deleteId) {
+    showMessage(
+      "error",
+      "Delete Failed",
+      "Property ID not found."
+    );
+    return;
+  }
+
+  try {
+    setLoading(true);
+
+    console.log(
+      "DELETE PROPERTY ID:",
+      deleteId
+    );
+
+    await axiosInstance.delete(
+      `/property/${encodeURIComponent(deleteId)}`
+    );
+
+    removeLocalDraft(deleteId);
+
+    if (pendingGlobalDraft?.draftId === deleteId) {
+      setPendingGlobalDraft(null);
+=======
       await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
@@ -3816,27 +4125,41 @@ const Properties = () => {
       }
     } finally {
       setLoading(false);
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
     }
-  };
 
-  const confirmDelete = async () => {
-    if (!deleteId) return;
+    setDeleteId(null);
 
-    try {
-      setLoading(true);
-      await axiosInstance.delete(`/property/${deleteId}`);
-      removeLocalDraft(deleteId);
-      if (pendingGlobalDraft?.draftId === deleteId) {
-        setPendingGlobalDraft(null);
-      }
-      setDeleteId(null);
+    showMessage(
+      "success",
+      "Property Deleted",
+      "Property deleted successfully."
+    );
 
-      showMessage(
-        "success",
-        "Property Deleted",
-        "Property deleted successfully."
-      );
+    await fetchProperties(isDraftView);
+    await fetchPropertyStats();
 
+  } catch (error: any) {
+    console.error(
+      "DELETE PROPERTY ERROR:",
+      error?.response?.data || error
+    );
+
+    showMessage(
+      "error",
+      "Delete Failed",
+      getErrorMessage(
+        error,
+        "Failed to delete property."
+      )
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+<<<<<<< HEAD
+=======
       await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
@@ -3870,6 +4193,7 @@ const Properties = () => {
       setLoading(false);
     }
   };
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
 
   const handleStatusChange = async (property: Property) => {
     try {
@@ -4116,6 +4440,43 @@ const Properties = () => {
             <Plus className="mr-2 h-4 w-4 stroke-[3]" />
             Add Property
           </Button>
+<<<<<<< HEAD
+          
+        {isAdmin && (
+  <Button
+    variant={isDraftView ? "default" : "outline"}
+    onClick={() => {
+      setIsDraftView(!isDraftView);
+      clearFilters();
+    }}
+    className={`h-11 rounded-2xl px-4 font-black transition flex items-center gap-2 ${
+      isDraftView
+        ? "bg-purple-900 text-white hover:bg-purple-950 shadow-md shadow-purple-900/30 border border-purple-950"
+        : "border-2 border-purple-800 text-purple-900 hover:bg-purple-100/70 hover:text-purple-950 bg-purple-50 shadow-xs"
+    }`}
+    title={
+      isDraftView
+        ? "Return to active portfolio"
+        : "View unpublished draft properties"
+    }
+  >
+    <FileText
+      className={`h-4 w-4 stroke-[2.5] ${
+        isDraftView
+          ? "text-amber-300"
+          : "text-purple-800"
+      }`}
+    />
+
+    <span>
+      {isDraftView
+        ? "Live Portfolio"
+        : `Drafts${stats.draft ? ` (${stats.draft})` : ""}`}
+    </span>
+  </Button>
+)}
+=======
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
         </div>
       </div>
 
@@ -4322,7 +4683,12 @@ const Properties = () => {
         loading={loading}
       />
 
+
       <Dialog open={messageOpen} onOpenChange={setMessageOpen}>
+<<<<<<< HEAD
+  <DialogContent className="w-[92vw] max-w-sm rounded-3xl p-6 border border-slate-200">
+    <div className="flex flex-col items-center text-center">
+=======
         <DialogContent className="w-[92vw] max-w-sm rounded-3xl p-6 border border-slate-200">
           <div className="flex flex-col items-center text-center">
             <div
@@ -4342,24 +4708,42 @@ const Properties = () => {
                 <AlertCircle className="h-7 w-7 stroke-[2.5]" />
               )}
             </div>
+>>>>>>> 796f9560e76f7909670494d998fbe509176ca87c
 
-            <DialogTitle className="text-lg font-black text-slate-950">
-              {messageTitle}
-            </DialogTitle>
+      <div
+        className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${
+          messageType === "success"
+            ? "bg-emerald-500/10 text-emerald-600"
+            : "bg-rose-500/10 text-rose-600"
+        }`}
+      >
+        {messageType === "success" ? (
+          <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+        ) : (
+          <AlertCircle className="h-7 w-7 stroke-[2.5]" />
+        )}
+      </div>
 
-            <p className="mt-2 text-xs font-semibold leading-relaxed text-slate-700">
-              {messageText}
-            </p>
+      <DialogTitle className="text-lg font-black text-slate-950">
+        {messageTitle}
+      </DialogTitle>
 
-            <Button
-              className="mt-6 w-full rounded-2xl font-black bg-primary text-white shadow-md shadow-primary/25"
-              onClick={() => setMessageOpen(false)}
-            >
-              Okay
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DialogDescription className="mt-2 text-xs font-semibold leading-relaxed text-slate-700">
+        {messageText}
+      </DialogDescription>
+
+      <Button
+        className="mt-6 w-full rounded-2xl font-black bg-primary text-white shadow-md shadow-primary/25"
+        onClick={() => setMessageOpen(false)}
+      >
+        Okay
+      </Button>
+
+    </div>
+  </DialogContent>
+</Dialog>
+
+     
     </div>
   );
 };

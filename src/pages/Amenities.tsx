@@ -1,6 +1,5 @@
-import axios from "axios";
 import React, { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, X } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Search } from "lucide-react";
 import axiosInstance from "@/lib/axiosInstance";
 
 // ==========================================
@@ -13,11 +12,14 @@ type Amenity = {
   name: string;
 
   // Backend returns populated amenities_type object
-  amenities_type?: {
-    _id?: string;
-    name?: string;
-    description?: string;
-  };
+  amenities_type?:
+    | {
+        _id?: string;
+        id?: string;
+        name?: string;
+        description?: string;
+      }
+    | string;
 
   description?: string;
 };
@@ -44,6 +46,13 @@ function Amenities() {
 
   const [data, setData] = useState<Amenity[]>([]);
   const [amenityTypes, setAmenityTypes] = useState<AmenityType[]>([]);
+
+  // ==========================================
+  // SEARCH & FILTER
+  // ==========================================
+
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterType, setFilterType] = useState("");
 
   // ==========================================
   // FORM
@@ -83,11 +92,13 @@ function Amenities() {
   // API URLS
   // ==========================================
 
-  const AMENITIES_API = "https://api.omsritaradevelopers.in/amenities";
+  const AMENITIES_API =
+    "https://api.omsritaradevelopers.in/amenities";
 
   const AMENITIES_TYPE_API =
     "https://api.omsritaradevelopers.in/amenitiestype";
 
+  // ==========================================
   // GET ALL AMENITIES
   // ==========================================
 
@@ -117,7 +128,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-        "Failed to load amenities."
+          "Failed to load amenities."
       );
     } finally {
       setLoading(false);
@@ -157,7 +168,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-        "Failed to load amenities types."
+          "Failed to load amenities types."
       );
     } finally {
       setTypeLoading(false);
@@ -172,6 +183,166 @@ function Amenities() {
     getAmenities();
     getAmenityTypes();
   }, []);
+
+  // ==========================================
+  // GET AMENITIES TYPE ID
+  // ==========================================
+
+  const getAmenityTypeId = (
+    item: Amenity
+  ): string => {
+    if (
+      typeof item.amenities_type === "object" &&
+      item.amenities_type !== null
+    ) {
+      return (
+        item.amenities_type._id ||
+        item.amenities_type.id ||
+        ""
+      );
+    }
+
+    if (
+      typeof item.amenities_type === "string"
+    ) {
+      return item.amenities_type;
+    }
+
+    const oldType = (item as any).amenitiestype;
+
+    if (
+      typeof oldType === "object" &&
+      oldType !== null
+    ) {
+      return (
+        oldType._id ||
+        oldType.id ||
+        ""
+      );
+    }
+
+    if (typeof oldType === "string") {
+      return oldType;
+    }
+
+    const anotherType =
+      (item as any).amenity_type;
+
+    if (
+      typeof anotherType === "object" &&
+      anotherType !== null
+    ) {
+      return (
+        anotherType._id ||
+        anotherType.id ||
+        ""
+      );
+    }
+
+    if (
+      typeof anotherType === "string"
+    ) {
+      return anotherType;
+    }
+
+    return "";
+  };
+
+  // ==========================================
+  // GET AMENITIES TYPE NAME
+  // ==========================================
+
+  const getAmenityTypeName = (
+    item: Amenity
+  ): string => {
+    // Populated object
+    if (
+      typeof item.amenities_type === "object" &&
+      item.amenities_type !== null
+    ) {
+      return (
+        item.amenities_type.name ||
+        "-"
+      );
+    }
+
+    // If backend only returns ID
+    const typeId =
+      getAmenityTypeId(item);
+
+    const foundType =
+      amenityTypes.find(
+        (t) =>
+          (t._id || t.id) === typeId
+      );
+
+    return foundType?.name || "-";
+  };
+
+  // ==========================================
+  // FILTERED DATA
+  // ==========================================
+
+  const filteredData = data.filter(
+    (item) => {
+      const search =
+        searchTerm
+          .trim()
+          .toLowerCase();
+
+      const itemName =
+        item.name
+          ?.toLowerCase() || "";
+
+      const itemDescription =
+        item.description
+          ?.toLowerCase() || "";
+
+      const typeName =
+        getAmenityTypeName(item)
+          .toLowerCase();
+
+      // ----------------------------------------
+      // SEARCH
+      // ----------------------------------------
+
+      const matchesSearch =
+        !search ||
+        itemName.includes(search) ||
+        itemDescription.includes(search);
+
+      // ----------------------------------------
+      // TYPE FILTER
+      // ----------------------------------------
+
+      const matchesType =
+        !filterType ||
+        getAmenityTypeId(item) ===
+          filterType ||
+        typeName ===
+          amenityTypes
+            .find(
+              (t) =>
+                (t._id || t.id) ===
+                filterType
+            )
+            ?.name?.toLowerCase();
+
+      return (
+        matchesSearch &&
+        matchesType
+      );
+    }
+  );
+
+  // ==========================================
+  // CLEAR SEARCH & FILTER
+  // ==========================================
+
+  const handleClearFilters = () => {
+    setSearchTerm("");
+    setFilterType("");
+  };
 
   // ==========================================
   // OPEN ADD MODAL
@@ -217,12 +388,16 @@ function Amenities() {
     // ------------------------------------------
 
     if (!name.trim()) {
-      setError("Amenities name is required.");
+      setError(
+        "Amenities name is required."
+      );
       return;
     }
 
     if (!type) {
-      setError("Please select an amenities type.");
+      setError(
+        "Please select an amenities type."
+      );
       return;
     }
 
@@ -250,10 +425,11 @@ function Amenities() {
       // ----------------------------------------
 
       if (editingId) {
-        const response = await axiosInstance.put(
-          `/amenities/${editingId}`,
-          payload
-        );
+        const response =
+          await axiosInstance.put(
+            `/amenities/${editingId}`,
+            payload
+          );
 
         console.log(
           "UPDATE RESPONSE:",
@@ -270,10 +446,11 @@ function Amenities() {
       // ----------------------------------------
 
       else {
-        const response = await axiosInstance.post(
-          "/amenities",
-          payload
-        );
+        const response =
+          await axiosInstance.post(
+            "/amenities",
+            payload
+          );
 
         console.log(
           "CREATE RESPONSE:",
@@ -299,7 +476,6 @@ function Amenities() {
 
       // Reload table
       await getAmenities();
-
     } catch (error: any) {
       console.error(
         "AMENITY SUBMIT ERROR:",
@@ -318,9 +494,9 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-        error.response?.data?.message ||
-        error.response?.data?.error ||
-        "Failed to save amenity."
+          error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to save amenity."
       );
     } finally {
       setSubmitting(false);
@@ -350,20 +526,47 @@ function Amenities() {
       item.name || ""
     );
 
-    // Properly extract amenities_type whether populated as object or returned as string ID
+    // Properly extract amenities_type
     const typeId =
-      typeof item.amenities_type === "object" && item.amenities_type !== null
-        ? item.amenities_type?._id || (item.amenities_type as any)?.id || ""
-        : typeof item.amenities_type === "string"
+      typeof item.amenities_type ===
+        "object" &&
+      item.amenities_type !== null
+        ? item.amenities_type?._id ||
+          item.amenities_type?.id ||
+          ""
+        : typeof item.amenities_type ===
+          "string"
         ? item.amenities_type
-        : typeof (item as any).amenitiestype === "object" && (item as any).amenitiestype !== null
-        ? (item as any).amenitiestype?._id || (item as any).amenitiestype?.id || ""
-        : typeof (item as any).amenitiestype === "string"
-        ? (item as any).amenitiestype
-        : typeof (item as any).amenity_type === "object" && (item as any).amenity_type !== null
-        ? (item as any).amenity_type?._id || (item as any).amenity_type?.id || ""
-        : typeof (item as any).amenity_type === "string"
-        ? (item as any).amenity_type
+        : typeof (item as any)
+              .amenitiestype ===
+            "object" &&
+          (item as any)
+            .amenitiestype !== null
+        ? (item as any)
+            .amenitiestype?._id ||
+          (item as any)
+            .amenitiestype?.id ||
+          ""
+        : typeof (item as any)
+              .amenitiestype ===
+            "string"
+        ? (item as any)
+            .amenitiestype
+        : typeof (item as any)
+              .amenity_type ===
+            "object" &&
+          (item as any)
+            .amenity_type !== null
+        ? (item as any)
+            .amenity_type?._id ||
+          (item as any)
+            .amenity_type?.id ||
+          ""
+        : typeof (item as any)
+              .amenity_type ===
+            "string"
+        ? (item as any)
+            .amenity_type
         : "";
 
     setType(typeId);
@@ -415,7 +618,6 @@ function Amenities() {
       );
 
       await getAmenities();
-
     } catch (error: any) {
       console.error(
         "DELETE ERROR:",
@@ -429,7 +631,7 @@ function Amenities() {
 
       setError(
         error.response?.data?.msg ||
-        "Failed to delete amenity."
+          "Failed to delete amenity."
       );
     }
   };
@@ -446,6 +648,7 @@ function Amenities() {
       ====================================== */}
 
       <div className="flex items-start justify-between mb-6">
+      
 
         <div>
           <h1 className="text-3xl font-bold text-slate-900">
@@ -521,59 +724,212 @@ function Amenities() {
         "
       >
 
-        {/* TABLE HEADER */}
+        {/* ====================================
+            TABLE HEADER
+        ==================================== */}
 
         <div
           className="
-            flex
-            items-center
-            justify-between
             border-b
             px-6
             py-5
           "
         >
 
-          <div>
+          <div className="flex items-center justify-between">
+          
 
-            <h2
-              className="
-                text-lg
-                font-semibold
-                text-slate-900
-              "
-            >
-              Amenities List
-            </h2>
+            <div>
 
-            <p
+              <h2
+                className="
+                  text-lg
+                  font-semibold
+                  text-slate-900
+                "
+              >
+                Amenities List
+              </h2>
+
+              <p
+                className="
+                  mt-1
+                  text-sm
+                  text-slate-500
+                "
+              >
+                {filteredData.length}{" "}
+                {filteredData.length === 1
+                  ? "amenity"
+                  : "amenities"}
+                {data.length !==
+                  filteredData.length &&
+                  ` of ${data.length}`}
+              </p>
+
+            </div>
+
+            <span
               className="
-                mt-1
+                rounded-full
+                bg-slate-100
+                px-3
+                py-1
                 text-sm
-                text-slate-500
+                font-medium
+                text-slate-600
               "
             >
-              {data.length}{" "}
-              {data.length === 1
-                ? "amenity"
-                : "amenities"}
-            </p>
+              {filteredData.length} Total
+            </span>
 
           </div>
 
-          <span
+          {/* ==================================
+              SEARCH + FILTER
+          ================================== */}
+
+          <div
             className="
-              rounded-full
-              bg-slate-100
-              px-3
-              py-1
-              text-sm
-              font-medium
-              text-slate-600
+              mt-5
+              flex
+              flex-col
+              gap-3
+              md:flex-row
+              md:items-center
             "
           >
-            {data.length} Total
-          </span>
+
+            {/* SEARCH */}
+
+            <div className="relative w-full md:w-64">
+              <Search
+                size={18}
+                className="
+                  absolute
+                  left-3
+                  top-1/2
+                  -translate-y-1/2
+                  text-slate-400
+                "
+              />
+
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) =>
+                  setSearchTerm(
+                    e.target.value
+                  )
+                }
+                placeholder="Search amenity name or description..."
+                className="
+                  w-full
+                  rounded-lg
+                  border
+                  border-slate-300
+                  bg-white
+                  py-3
+                  pl-10
+                  pr-4
+                  text-sm
+                  text-slate-700
+                  outline-none
+                  transition
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-100
+                "
+              />
+
+            </div>
+
+            {/* TYPE FILTER */}
+
+            <div className="w-full md:w-64">
+       
+
+              <select
+                value={filterType}
+                onChange={(e) =>
+                  setFilterType(
+                    e.target.value
+                  )
+                }
+                disabled={typeLoading}
+                className="
+                  w-full
+                  rounded-lg
+                  border
+                  border-slate-300
+                  bg-white
+                  px-4
+                  py-3
+                  text-sm
+                  text-slate-700
+                  outline-none
+                  focus:border-blue-500
+                  focus:ring-2
+                  focus:ring-blue-100
+                  disabled:bg-slate-100
+                "
+              >
+
+                <option value="">
+                  {typeLoading
+                    ? "Loading types..."
+                    : "All Amenities Types"}
+                </option>
+
+                {amenityTypes.map(
+                  (item) => {
+
+                    const id =
+                      item._id ||
+                      item.id;
+
+                    return (
+                      <option
+                        key={id}
+                        value={id}
+                      >
+                        {item.name}
+                      </option>
+                    );
+                  }
+                )}
+
+              </select>
+
+            </div>
+
+            {/* CLEAR FILTER */}
+
+            {(searchTerm ||
+              filterType) && (
+              <button
+                type="button"
+                onClick={
+                  handleClearFilters
+                }
+                className="
+                  whitespace-nowrap
+                  rounded-lg
+                  border
+                  border-slate-300
+                  px-4
+                  py-3
+                  text-sm
+                  font-medium
+                  text-slate-600
+                  hover:bg-slate-50
+                "
+              >
+                Clear
+              </button>
+            )}
+
+          </div>
 
         </div>
 
@@ -637,6 +993,82 @@ function Amenities() {
 
           </div>
 
+        ) : filteredData.length === 0 ? (
+
+          /* ==================================
+             NO FILTER RESULTS
+          ================================== */
+
+          <div
+            className="
+              py-12
+              text-center
+            "
+          >
+
+            <div
+              className="
+                mx-auto
+                mb-3
+                flex
+                h-12
+                w-12
+                items-center
+                justify-center
+                rounded-full
+                bg-slate-100
+              "
+            >
+              <Search
+                size={22}
+                className="text-slate-400"
+              />
+            </div>
+
+            <p
+              className="
+                text-sm
+                font-medium
+                text-slate-700
+              "
+            >
+              No amenities found
+            </p>
+
+            <p
+              className="
+                mt-1
+                text-sm
+                text-slate-500
+              "
+            >
+              Try changing your search or
+              amenities type filter.
+            </p>
+
+            <button
+              type="button"
+              onClick={
+                handleClearFilters
+              }
+              className="
+                mt-4
+                rounded-lg
+                border
+                border-slate-300
+                px-4
+                py-2
+                text-sm
+                font-medium
+                text-slate-600
+                hover:bg-slate-50
+              "
+            >
+              Clear Filters
+            </button>
+
+          </div>
+
         ) : (
 
           /* ==================================
@@ -656,63 +1088,73 @@ function Amenities() {
 
                 <tr>
 
-                  <th className="
-                    px-6
-                    py-4
-                    text-left
-                    text-xs
-                    font-semibold
-                    uppercase
-                    text-slate-500
-                  ">
+                  <th
+                    className="
+                      px-6
+                      py-4
+                      text-left
+                      text-xs
+                      font-semibold
+                      uppercase
+                      text-slate-500
+                    "
+                  >
                     #
                   </th>
 
-                  <th className="
-                    px-6
-                    py-4
-                    text-left
-                    text-xs
-                    font-semibold
-                    uppercase
-                    text-slate-500
-                  ">
+                  <th
+                    className="
+                      px-6
+                      py-4
+                      text-left
+                      text-xs
+                      font-semibold
+                      uppercase
+                      text-slate-500
+                    "
+                  >
                     Amenities Name
                   </th>
 
-                  <th className="
-                    px-6
-                    py-4
-                    text-left
-                    text-xs
-                    font-semibold
-                    uppercase
-                    text-slate-500
-                  ">
+                  <th
+                    className="
+                      px-6
+                      py-4
+                      text-left
+                      text-xs
+                      font-semibold
+                      uppercase
+                      text-slate-500
+                    "
+                  >
                     Amenities Type
                   </th>
 
-                  <th className="
-                    px-6
-                    py-4
-                    text-left
-                    text-xs
-                    font-semibold
-                    uppercase
-                    text-slate-500
-                  ">
+                  <th
+                    className="
+                      px-6
+                      py-4
+                      text-left
+                      text-xs
+                      font-semibold
+                      uppercase
+                      text-slate-500
+                    "
+                  >
                     Description
                   </th>
 
-                  <th className="
-                    px-6
-                    py-4
-                    text-left
-                    text-xs
-                    font-semibold
-                    uppercase
-                    text-slate-500
-                  ">
+                  <th
+                    className="
+                      px-6
+                      py-4
+                      text-left
+                      text-xs
+                      font-semibold
+                      uppercase
+                      text-slate-500
+                    "
+                  >
                     Actions
                   </th>
 
@@ -722,7 +1164,7 @@ function Amenities() {
 
               <tbody className="divide-y">
 
-                {data.map(
+                {filteredData.map(
                   (item, index) => (
 
                     <tr
@@ -770,18 +1212,28 @@ function Amenities() {
                           px-6
                           py-4
                           text-sm
+                          font-medium
                           text-slate-600
                         "
                       >
-                        {typeof item.amenities_type === "object" && item.amenities_type !== null
-                          ? item.amenities_type?.name || "-"
-                          : amenityTypes.find(
-                              (t) =>
-                                (t._id || t.id) ===
-                                (item.amenities_type ||
-                                  (item as any).amenitiestype ||
-                                  (item as any).amenity_type)
-                            )?.name || (typeof item.amenities_type === "string" ? item.amenities_type : "-")}
+
+                        <span
+                          className="
+                            inline-flex
+                            rounded-full
+                            bg-blue-50
+                            px-3
+                            py-1
+                            text-xs
+                            font-semibold
+                            text-blue-700
+                          "
+                        >
+                          {getAmenityTypeName(
+                            item
+                          )}
+                        </span>
+
                       </td>
 
                       {/* DESCRIPTION */}
@@ -795,7 +1247,8 @@ function Amenities() {
                           text-slate-600
                         "
                       >
-                        {item.description || "-"}
+                        {item.description ||
+                          "-"}
                       </td>
 
                       {/* ACTIONS */}
@@ -815,7 +1268,9 @@ function Amenities() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleEdit(item)
+                              handleEdit(
+                                item
+                              )
                             }
                             title="Edit"
                             className="
@@ -827,7 +1282,9 @@ function Amenities() {
                               hover:bg-blue-50
                             "
                           >
-                            <Pencil size={17} />
+                            <Pencil
+                              size={17}
+                            />
                           </button>
 
                           {/* DELETE */}
@@ -835,7 +1292,9 @@ function Amenities() {
                           <button
                             type="button"
                             onClick={() =>
-                              handleDelete(item)
+                              handleDelete(
+                                item
+                              )
                             }
                             title="Delete"
                             className="
@@ -847,7 +1306,9 @@ function Amenities() {
                               hover:bg-red-50
                             "
                           >
-                            <Trash2 size={17} />
+                            <Trash2
+                              size={17}
+                            />
                           </button>
 
                         </div>
@@ -941,7 +1402,9 @@ function Amenities() {
 
               <button
                 type="button"
-                onClick={handleCloseModal}
+                onClick={
+                  handleCloseModal
+                }
                 className="
                   rounded-lg
                   p-2
@@ -1006,7 +1469,9 @@ function Amenities() {
                   type="text"
                   value={name}
                   onChange={(e) =>
-                    setName(e.target.value)
+                    setName(
+                      e.target.value
+                    )
                   }
                   placeholder="Example: Swimming Pool"
                   className="
@@ -1047,9 +1512,13 @@ function Amenities() {
                 <select
                   value={type}
                   onChange={(e) =>
-                    setType(e.target.value)
+                    setType(
+                      e.target.value
+                    )
                   }
-                  disabled={typeLoading}
+                  disabled={
+                    typeLoading
+                  }
                   className="
                     w-full
                     rounded-lg
@@ -1096,7 +1565,8 @@ function Amenities() {
                 {/* NO TYPES */}
 
                 {!typeLoading &&
-                  amenityTypes.length === 0 && (
+                  amenityTypes.length ===
+                    0 && (
                     <p
                       className="
                         mt-2
@@ -1104,8 +1574,9 @@ function Amenities() {
                         text-red-500
                       "
                     >
-                      No amenities types found.
-                      Please create an Amenities
+                      No amenities types
+                      found. Please
+                      create an Amenities
                       Type first.
                     </p>
                   )}
@@ -1171,7 +1642,9 @@ function Amenities() {
 
                 <button
                   type="button"
-                  onClick={handleCloseModal}
+                  onClick={
+                    handleCloseModal
+                  }
                   className="
                     rounded-lg
                     border
@@ -1209,8 +1682,8 @@ function Amenities() {
                   {submitting
                     ? "Saving..."
                     : editingId
-                      ? "Update"
-                      : "Save"}
+                    ? "Update"
+                    : "Save"}
                 </button>
 
               </div>
