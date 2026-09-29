@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Layers,
   UploadCloud,
+  User,
 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -93,9 +94,17 @@ export const PropertyTable: React.FC<PropertyTableProps> = ({
                             {property.name}
                           </p>
                         </button>
-                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">
-                          {property.project_name || property.owner_name || "Direct Listing"}
-                        </p>
+                        <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                          <p className="text-[11px] font-semibold text-slate-500">
+                            {property.project_name || property.owner_name || "Direct Listing"}
+                          </p>
+                          {property.created_by?.name && (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 px-1.5 py-0.5 text-[9.5px] font-bold text-amber-900 border border-amber-200">
+                              <User className="h-2.5 w-2.5 text-amber-700" />
+                              Agent: {property.created_by.name}
+                            </span>
+                          )}
+                        </div>
                         {amenitiesCount > 0 && (
                           <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold text-slate-500">
                             <Layers className="h-2.5 w-2.5 text-primary" />

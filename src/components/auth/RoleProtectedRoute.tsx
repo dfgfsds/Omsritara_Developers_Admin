@@ -13,23 +13,38 @@ interface RoleProtectedRouteProps {
 export const RoleProtectedRoute = ({
   children,
   allowedRoles,
-  redirectPath = "/dashboard",
+  redirectPath,
 }: RoleProtectedRouteProps) => {
-  const { role } = useAuth();
+  const { role, token } = useAuth();
   const hasAccess = allowedRoles.includes(role);
 
+  // If not logged in, always redirect to /login
+  const effectiveRedirect =
+    redirectPath ||
+    (!token
+      ? "/login"
+      : role === "agent"
+      ? "/agent/dashboard"
+      : "/dashboard");
+
   useEffect(() => {
-    if (!hasAccess) {
+    if (!token) {
       toast({
-        title: "Access Restricted",
-        description: `This section is only accessible to ${allowedRoles.join(" / ")}. Redirected to your dashboard.`,
+        title: "Session Required",
+        description: "Please log in to continue.",
+        variant: "destructive",
+      });
+    } else if (!hasAccess) {
+      toast({
+        title: "Access Denied",
+        description: "You do not have administrative privileges to access this section.",
         variant: "destructive",
       });
     }
-  }, [hasAccess, allowedRoles]);
+  }, [hasAccess, token]);
 
-  if (!hasAccess) {
-    return <Navigate to={redirectPath} replace />;
+  if (!token || !hasAccess) {
+    return <Navigate to={effectiveRedirect} replace />;
   }
 
   return <>{children}</>;

@@ -54,6 +54,13 @@ export interface Property {
   owner_name?: string;
   developer_name?: string;
   project_name?: string;
+  created_by?: {
+    _id?: string;
+    name?: string;
+    email?: string;
+    mobile?: string;
+    img_url?: string;
+  } | null;
   status: "available" | "sold" | "under_construction" | "draft";
   isFeatured?: boolean;
   isVerified?: boolean;
@@ -133,6 +140,7 @@ export interface PropertyFormData {
   status: "available" | "sold" | "under_construction" | "draft";
   isFeatured: boolean;
   isVerified: boolean;
+  agent_id?: string;
 }
 
 export interface Stats {

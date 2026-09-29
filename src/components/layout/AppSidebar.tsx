@@ -33,19 +33,20 @@ import { cn } from "@/lib/utils";
 const adminMenuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Properties", url: "/properties", icon: Building2 },
-  { title: "Agents", url: "/agents", icon: Briefcase },
   { title: "Property Types", url: "/property-types", icon: Building },
-  { title: "Enquiries", url: "/enquiries", icon: MessageCircle },
-  { title: "Amenities Type", url: "/amenitiestype", icon: Star },
   { title: "Amenities", url: "/amenities", icon: Star },
+  { title: "Amenities Type", url: "/amenitiestype", icon: Star },
   { title: "Blogs", url: "/blogs", icon: FileText },
+  { title: "Enquiries / Leads", url: "/enquiries", icon: MessageCircle },
   { title: "Users", url: "/users", icon: User },
+  { title: "Agent Management", url: "/agents", icon: Briefcase },
 ];
 
 const agentMenuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: Home },
-  { title: "My Properties", url: "/properties", icon: Building2 },
-  { title: "My Enquiries", url: "/enquiries", icon: MessageCircle },
+  { title: "Dashboard", url: "/agent/dashboard", icon: Home },
+  { title: "My Properties", url: "/agent/properties", icon: Building2 },
+  { title: "My Enquiries / Leads", url: "/agent/enquiries", icon: MessageCircle },
+  { title: "My Profile", url: "/agent/profile", icon: User },
 ];
 
 export function AppSidebar() {
