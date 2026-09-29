@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eye, EyeOff, Building2 } from "lucide-react";
+import { Eye, EyeOff, Building2, ShieldCheck, Briefcase } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import heroLogin from "@/assets/hero-login.jpg";
 
@@ -22,10 +22,13 @@ const Login = () => {
     setIsLoading(true);
 
     try {
-      await login(email, password);
+      const res = await login(email, password);
+      const isAgentLogin = res?.role === "agent";
       toast({
-        title: "Login Successful",
-        description: "Welcome to Property Management Dashboard",
+        title: isAgentLogin ? "Agent Portal Login" : "Admin CRM Login",
+        description: isAgentLogin
+          ? `Welcome back, ${res.name}! Logged in with Agent scoped access.`
+          : `Welcome back, ${res.name || "Administrator"}! Full CRM control enabled.`,
       });
     } catch (err: any) {
       toast({
@@ -72,7 +75,7 @@ const Login = () => {
               <CardTitle className="text-2xl font-bold text-card-header">
                 Welcome Back
               </CardTitle>
-              <p className="text-muted-foreground">
+              <p className="text-muted-foreground text-xs">
                 Enter your credentials to access your dashboard
               </p>
             </CardHeader>
@@ -83,7 +86,7 @@ const Login = () => {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin@OmsritaraDevelopers.com"
+                    placeholder="e.g. admin@omsritara.com or agent@omsritara.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="h-12"
@@ -117,12 +120,62 @@ const Login = () => {
                 </div>
                 <Button
                   type="submit"
-                  className="w-full h-12 bg-gradient-primary hover:opacity-90 transition-fast shadow-primary"
+                  className="w-full h-12 bg-gradient-primary hover:opacity-90 transition-fast shadow-primary font-bold text-sm"
                   disabled={isLoading}
                 >
                   {isLoading ? "Signing In..." : "Sign In"}
                 </Button>
               </form>
+
+              {/* Quick Fill Credentials for Testing */}
+              <div className="mt-6 pt-4 border-t border-slate-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Quick Demo Credentials
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">Click to populate</span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("admin@omsritara.com");
+                      setPassword("admin123");
+                    }}
+                    className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100/70 text-left transition-all group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
+                        <span className="text-[11px] font-black text-emerald-800">Admin</span>
+                      </div>
+                      <span className="text-[9px] font-bold text-emerald-600">Full CRM</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-700/80 truncate mt-1">admin@omsritara.com</p>
+                    <p className="text-[9px] text-emerald-600/70 font-mono mt-0.5">pass: admin123</p>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEmail("ramesh.agent@omsritara.com");
+                      setPassword("agent123");
+                    }}
+                    className="p-2.5 rounded-xl border border-amber-200 bg-amber-50/60 hover:bg-amber-100/70 text-left transition-all group"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Briefcase className="h-3.5 w-3.5 text-amber-600" />
+                        <span className="text-[11px] font-black text-amber-800">Agent</span>
+                      </div>
+                      <span className="text-[9px] font-bold text-amber-600">Scoped</span>
+                    </div>
+                    <p className="text-[10px] text-amber-700/80 truncate mt-1">ramesh.agent@omsritara.com</p>
+                    <p className="text-[9px] text-amber-600/70 font-mono mt-0.5">pass: agent123</p>
+                  </button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -132,3 +185,4 @@ const Login = () => {
 };
 
 export default Login;
+

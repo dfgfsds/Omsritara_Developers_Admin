@@ -7,6 +7,7 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  Info,
   FileText,
   Sparkles,
   CloudOff,
@@ -42,6 +43,7 @@ import {
   isFormDirtyOrHasContent,
   StoredPropertyDraft,
 } from "@/utils/propertyDraftStorage";
+import { useAuth } from "@/context/AuthContext";
 
 const propertyStatusCycle: Record<
   string,
@@ -52,12 +54,14 @@ const propertyStatusCycle: Record<
   sold: "available",
 };
 
+const str = (v: any) => (v !== undefined && v !== null ? String(v) : "");
+
 const Properties = () => {
+  const { role, isAgent, isAdmin, currentAgent } = useAuth();
   const [searchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") || searchParams.get("q") || "";
 
   const [properties, setProperties] = useState<Property[]>([]);
-  const [isDraftView, setIsDraftView] = useState(false);
   const [stats, setStats] = useState<Stats>({
     total: 0,
     available: 0,
@@ -125,12 +129,12 @@ const Properties = () => {
   const [messageOpen, setMessageOpen] = useState(false);
   const [messageTitle, setMessageTitle] = useState("");
   const [messageText, setMessageText] = useState("");
-  const [messageType, setMessageType] = useState<"success" | "error">(
+  const [messageType, setMessageType] = useState<"success" | "error" | "info">(
     "success"
   );
 
   const showMessage = (
-    type: "success" | "error",
+    type: "success" | "error" | "info",
     title: string,
     text: string
   ) => {
@@ -297,14 +301,23 @@ const Properties = () => {
     }
   };
 
-  const fetchProperties = async (draftMode = isDraftView) => {
+  const fetchProperties = async () => {
     try {
       setLoading(true);
-      const url = draftMode ? "/property?status=draft" : "/property";
-      const response = await axiosInstance.get(url);
+      const agentId = isAgent && currentAgent ? currentAgent._id : undefined;
+      const response = await axiosInstance.get("/property", {
+        params: agentId ? { created_by: agentId } : undefined,
+      });
       const result =
         response?.data?.result || response?.data?.data || response?.data;
-      setProperties(Array.isArray(result) ? result : []);
+      const allProps = Array.isArray(result) ? result : [];
+      const scopedProps = agentId
+        ? allProps.filter((p: any) => {
+            const ownerId = p.created_by?._id || p.created_by;
+            return String(ownerId) === String(agentId);
+          })
+        : allProps;
+      setProperties(scopedProps);
     } catch (error: any) {
       showMessage(
         "error",
@@ -317,6 +330,7 @@ const Properties = () => {
   };
 
   const fetchPropertyStats = async () => {
+    if (isAgent) return; // Handled directly in fetchProperties for agent
     try {
       const response = await axiosInstance.get("/property/stats");
       const result =
@@ -346,11 +360,8 @@ const Properties = () => {
     fetchAmenities();
     fetchAllAmenities();
     fetchPropertyStats();
-  }, []);
-
-  useEffect(() => {
-    fetchProperties(isDraftView);
-  }, [isDraftView]);
+    fetchProperties();
+  }, [isAgent, currentAgent?._id]);
 
   const resetAmenitySelector = () => {
     setSelectedAmenity("");
@@ -646,7 +657,7 @@ const Properties = () => {
       formData.name.trim() ||
       (editingProperty?.name ? editingProperty.name : "Untitled Draft");
 
-    let combinedAmenities = [...formData.amenities_data];
+    const combinedAmenities = [...formData.amenities_data];
     if (selectedAmenity && selectedAmenityTypes.length > 0) {
       const existIdx = combinedAmenities.findIndex(
         (a) => a.amenities === selectedAmenity
@@ -821,74 +832,26 @@ const Properties = () => {
     return () => clearTimeout(timer);
   }, [open, formData, formActiveTab, editingProperty, hasUnsavedChanges]);
 
-  // Background Server Auto-Sync (3500ms debounce) for new properties or existing drafts
+
+  // Clean up legacy local draft storage on mount so user is never prompted with stale drafts
   useEffect(() => {
-    if (!open) return;
-    if (!hasUnsavedChanges) return;
-    if (!navigator.onLine) return;
-    // Do not downgrade a live property to draft on backend automatically
-    if (editingProperty && editingProperty.status !== "draft") return;
-    // Require minimal content before syncing to backend
-    if (!formData.name?.trim() && !formData.type) return;
-
-    const timer = setTimeout(async () => {
-      try {
-        setAutoSaveStatus("saving");
-        const draftPayload = buildDraftDataPayload();
-
-        if (editingProperty?._id) {
-          await axiosInstance.put(
-            `/property/${editingProperty._id}`,
-            draftPayload
-          );
-          setAutoSaveStatus("saved");
-          setLastSavedTime(formatDraftTime(Date.now()));
-        } else {
-          const response = await axiosInstance.post("/property", draftPayload);
-          const created =
-            response?.data?.result ||
-            response?.data?.data ||
-            response?.data;
-          if (created?._id) {
-            setEditingProperty(created);
-            removeLocalDraft("new");
-            saveLocalDraft(created._id, {
-              propertyId: created._id,
-              editingProperty: created,
-              formData,
-              formActiveTab,
-              name: formData.name,
-            });
-          }
-          setAutoSaveStatus("saved");
-          setLastSavedTime(formatDraftTime(Date.now()));
-          fetchPropertyStats();
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith("oms_property_draft_") ||
+            k === "oms_property_latest_draft_id")
+        ) {
+          keysToRemove.push(k);
         }
-      } catch (err) {
-        console.warn("Silent server draft sync failed, saved locally:", err);
-        setAutoSaveStatus("local");
       }
-    }, 3500);
-
-    return () => clearTimeout(timer);
-  }, [open, formData, formActiveTab, editingProperty, hasUnsavedChanges]);
-
-  // Check for pending active draft when outside the dialog
-  useEffect(() => {
-    const checkPendingDraft = () => {
-      if (open) return;
-      const latest = getLatestActiveDraft();
-      if (latest && isFormDirtyOrHasContent(latest.formData)) {
-        setPendingGlobalDraft(latest);
-      } else {
-        setPendingGlobalDraft(null);
-      }
-    };
-
-    checkPendingDraft();
-    window.addEventListener("focus", checkPendingDraft);
-    return () => window.removeEventListener("focus", checkPendingDraft);
-  }, [open]);
+      keysToRemove.forEach((k) => localStorage.removeItem(k));
+    } catch {
+      // Ignore
+    }
+  }, []);
 
   // Online / Offline & BeforeUnload listeners
   useEffect(() => {
@@ -974,32 +937,17 @@ const Properties = () => {
     }
   };
 
-  // Opens form for new property, restoring unsaved draft if found
+  // Opens form for new property with clean state
   const handleAddNewProperty = async () => {
-    const existingNewDraft = getLocalDraft("new");
-    if (
-      existingNewDraft &&
-      isFormDirtyOrHasContent(existingNewDraft.formData)
-    ) {
-      await resumeDraft(existingNewDraft);
-    } else {
-      resetForm();
-      setIsRestoredDraft(false);
-      setLastSavedTime(null);
-      setAutoSaveStatus("idle");
-      initialFormDataRef.current = emptyFormData;
-      setOpen(true);
-    }
+    resetForm();
+    setIsRestoredDraft(false);
+    setLastSavedTime(null);
+    setAutoSaveStatus("idle");
+    initialFormDataRef.current = emptyFormData;
+    setOpen(true);
   };
 
   const handleEdit = async (property: Property) => {
-    // Check if user has an unsaved local draft for this specific property
-    const existingDraft = getLocalDraft(property._id);
-    if (existingDraft && isFormDirtyOrHasContent(existingDraft.formData)) {
-      await resumeDraft(existingDraft);
-      return;
-    }
-
     setEditingProperty(property);
 
     const initialCache: Record<string, AmenityType[]> = {};
@@ -1328,7 +1276,7 @@ const Properties = () => {
         v === "" || v === undefined || v === null || isNaN(Number(v)) ? undefined : Number(v);
 
       // Merge any pending amenities selection from dropdowns
-      let combinedAmenities = [...formData.amenities_data];
+      const combinedAmenities = [...formData.amenities_data];
       if (selectedAmenity && selectedAmenityTypes.length > 0) {
         const existIdx = combinedAmenities.findIndex(
           (a) => a.amenities === selectedAmenity
@@ -1442,36 +1390,63 @@ const Properties = () => {
       };
 
       if (editingProperty?._id) {
-        if (editingProperty.status === "draft") {
-          await axiosInstance.put(
-            `/property/${editingProperty._id}/publish`,
-            propertyData
-          );
-          removeLocalDraft(editingProperty._id);
-          setIsRestoredDraft(false);
-          setPendingGlobalDraft(null);
-          setOpen(false);
-          resetForm();
-          showMessage(
-            "success",
-            "Property Published",
-            "Draft property is now live and published successfully."
-          );
-        } else {
-          await axiosInstance.put(
-            `/property/${editingProperty._id}`,
-            propertyData
-          );
-          removeLocalDraft(editingProperty._id);
-          setIsRestoredDraft(false);
-          setPendingGlobalDraft(null);
-          setOpen(false);
-          resetForm();
-          showMessage(
-            "success",
-            "Property Updated",
-            "Property details updated successfully."
-          );
+        const targetId = editingProperty._id;
+        try {
+          if (editingProperty.status === "draft") {
+            await axiosInstance.put(
+              `/property/${targetId}/publish`,
+              propertyData
+            );
+            removeLocalDraft(targetId);
+            setIsRestoredDraft(false);
+            setPendingGlobalDraft(null);
+            setOpen(false);
+            resetForm();
+            showMessage(
+              "success",
+              "Property Published",
+              "Draft property is now live and published successfully."
+            );
+          } else {
+            await axiosInstance.put(
+              `/property/${targetId}`,
+              propertyData
+            );
+            removeLocalDraft(targetId);
+            setIsRestoredDraft(false);
+            setPendingGlobalDraft(null);
+            setOpen(false);
+            resetForm();
+            showMessage(
+              "success",
+              "Property Updated",
+              "Property details updated successfully."
+            );
+          }
+        } catch (updateErr: any) {
+          const isNotFound =
+            (updateErr?.response?.status === 400 &&
+              (updateErr?.response?.data?.msg === "Data Not Found" ||
+                updateErr?.response?.data?.message === "Data Not Found")) ||
+            updateErr?.response?.status === 404;
+
+          if (isNotFound) {
+            // Property was removed on server; create it as a new property so user data isn't lost
+            await axiosInstance.post("/property", propertyData);
+            removeLocalDraft(targetId);
+            removeLocalDraft("new");
+            setIsRestoredDraft(false);
+            setPendingGlobalDraft(null);
+            setOpen(false);
+            resetForm();
+            showMessage(
+              "success",
+              "Property Created",
+              "The original property was no longer found on the server, so a new property was created successfully."
+            );
+          } else {
+            throw updateErr;
+          }
         }
       } else {
         await axiosInstance.post("/property", propertyData);
@@ -1487,7 +1462,7 @@ const Properties = () => {
         );
       }
 
-      await fetchProperties(isDraftView);
+      await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
       showMessage(
@@ -1509,20 +1484,46 @@ const Properties = () => {
       const draftData = buildDraftDataPayload();
 
       if (editingProperty?._id) {
-        await axiosInstance.put(
-          `/property/${editingProperty._id}`,
-          draftData
-        );
-        removeLocalDraft(editingProperty._id);
-        setIsRestoredDraft(false);
-        setPendingGlobalDraft(null);
-        setOpen(false);
-        resetForm();
-        showMessage(
-          "success",
-          "Draft Updated",
-          "Property draft updated successfully."
-        );
+        const targetId = editingProperty._id;
+        try {
+          await axiosInstance.put(
+            `/property/${targetId}`,
+            draftData
+          );
+          removeLocalDraft(targetId);
+          setIsRestoredDraft(false);
+          setPendingGlobalDraft(null);
+          setOpen(false);
+          resetForm();
+          showMessage(
+            "success",
+            "Draft Updated",
+            "Property draft updated successfully."
+          );
+        } catch (updateErr: any) {
+          const isNotFound =
+            (updateErr?.response?.status === 400 &&
+              (updateErr?.response?.data?.msg === "Data Not Found" ||
+                updateErr?.response?.data?.message === "Data Not Found")) ||
+            updateErr?.response?.status === 404;
+
+          if (isNotFound) {
+            await axiosInstance.post("/property", draftData);
+            removeLocalDraft(targetId);
+            removeLocalDraft("new");
+            setIsRestoredDraft(false);
+            setPendingGlobalDraft(null);
+            setOpen(false);
+            resetForm();
+            showMessage(
+              "success",
+              "Draft Saved",
+              "The previous property was not found on the server. Saved as a new draft successfully."
+            );
+          } else {
+            throw updateErr;
+          }
+        }
       } else {
         await axiosInstance.post("/property", draftData);
         removeLocalDraft("new");
@@ -1537,7 +1538,7 @@ const Properties = () => {
         );
       }
 
-      await fetchProperties(isDraftView);
+      await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
       showMessage(
@@ -1584,7 +1585,10 @@ const Properties = () => {
               name: p.name.trim(),
               type: p.type || "Landmark",
               distance:
-                p.distance !== "" && p.distance !== null && p.distance !== undefined && !isNaN(Number(p.distance))
+                p.distance !== null &&
+                p.distance !== undefined &&
+                (p.distance as any) !== "" &&
+                !isNaN(Number(p.distance))
                   ? Number(p.distance)
                   : undefined,
               distance_unit: p.distance_unit || "km",
@@ -1604,14 +1608,31 @@ const Properties = () => {
         `"${property.name}" is now live and published successfully.`
       );
 
-      await fetchProperties(isDraftView);
+      await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
-      showMessage(
-        "error",
-        "Publish Failed",
-        getErrorMessage(error, "Failed to publish draft property.")
-      );
+      const isNotFound =
+        (error?.response?.status === 400 &&
+          (error?.response?.data?.msg === "Data Not Found" ||
+            error?.response?.data?.message === "Data Not Found")) ||
+        error?.response?.status === 404;
+
+      if (isNotFound) {
+        removeLocalDraft(property._id);
+        showMessage(
+          "error",
+          "Property Not Found",
+          "This draft property no longer exists on the server."
+        );
+        await fetchProperties();
+        await fetchPropertyStats();
+      } else {
+        showMessage(
+          "error",
+          "Publish Failed",
+          getErrorMessage(error, "Failed to publish draft property.")
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -1638,11 +1659,32 @@ const Properties = () => {
       await fetchProperties();
       await fetchPropertyStats();
     } catch (error: any) {
-      showMessage(
-        "error",
-        "Delete Failed",
-        getErrorMessage(error, "Failed to delete property.")
-      );
+      const isNotFound =
+        (error?.response?.status === 400 &&
+          (error?.response?.data?.msg === "Data Not Found" ||
+            error?.response?.data?.message === "Data Not Found")) ||
+        error?.response?.status === 404;
+
+      if (isNotFound) {
+        removeLocalDraft(deleteId);
+        if (pendingGlobalDraft?.draftId === deleteId) {
+          setPendingGlobalDraft(null);
+        }
+        setDeleteId(null);
+        showMessage(
+          "info",
+          "Property Removed",
+          "The property was already removed from the server."
+        );
+        await fetchProperties();
+        await fetchPropertyStats();
+      } else {
+        showMessage(
+          "error",
+          "Delete Failed",
+          getErrorMessage(error, "Failed to delete property.")
+        );
+      }
     } finally {
       setLoading(false);
     }
@@ -1671,6 +1713,8 @@ const Properties = () => {
         "Status Update Failed",
         getErrorMessage(error, "Failed to update property status.")
       );
+      await fetchProperties();
+      await fetchPropertyStats();
     }
   };
 
@@ -1692,7 +1736,7 @@ const Properties = () => {
 
       showMessage(
         "success",
-        nextVal ? "Featured Added" : "Featured Removed",
+        "Featured Updated",
         `"${property.name}" is ${nextVal
           ? "now featured on showcase"
           : "no longer featured"
@@ -1714,6 +1758,8 @@ const Properties = () => {
         "Update Failed",
         getErrorMessage(error, "Failed to update featured status.")
       );
+      await fetchProperties();
+      await fetchPropertyStats();
     }
   };
 
@@ -1735,7 +1781,7 @@ const Properties = () => {
 
       showMessage(
         "success",
-        nextVal ? "Listing Verified" : "Verification Removed",
+        "Verification Updated",
         `"${property.name}" verification badge ${nextVal ? "enabled" : "removed"
         }.`
       );
@@ -1758,6 +1804,8 @@ const Properties = () => {
           "Failed to update verification status."
         )
       );
+      await fetchProperties();
+      await fetchPropertyStats();
     }
   };
 
@@ -1865,142 +1913,30 @@ const Properties = () => {
 
   return (
     <div className="space-y-7">
-      {/* Unsaved Draft Recovery Top Banner */}
-      {pendingGlobalDraft && !open && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 rounded-2xl border-2 border-amber-300/90 bg-gradient-to-r from-amber-50 via-orange-50/60 to-amber-100/70 p-4 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-center gap-3.5">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xs">
-              <Sparkles className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h4 className="text-sm font-black text-amber-950">
-                  Unsaved Property Draft Found
-                </h4>
-                <span className="rounded-full bg-amber-200/90 border border-amber-300 px-2.5 py-0.5 text-[10px] font-black text-amber-900">
-                  {formatDraftTime(pendingGlobalDraft.timestamp)}
-                </span>
-              </div>
-              <p className="text-xs text-amber-900 font-semibold mt-0.5">
-                You were editing <strong>"{pendingGlobalDraft.name}"</strong> before leaving. Would you like to resume editing where you left off?
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                removeLocalDraft(pendingGlobalDraft.draftId);
-                setPendingGlobalDraft(null);
-              }}
-              className="h-9 rounded-xl text-xs font-bold text-amber-900 hover:bg-amber-200/70 hover:text-amber-950"
-            >
-              Discard Draft
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => resumeDraft(pendingGlobalDraft)}
-              className="h-9 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
-            >
-              Resume Editing
-            </Button>
-          </div>
-        </div>
-      )}
 
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-black tracking-tight text-slate-950">
-              {isDraftView ? "Draft Properties" : "Properties Portfolio"}
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-950 font-heading">
+              Properties Portfolio
             </h1>
-
-            {isDraftView && (
-              <span className="rounded-full bg-purple-900 text-white border border-purple-950 text-[11px] font-black px-3 py-0.5 shadow-xs uppercase tracking-wider">
-                Admin Drafts Only
-              </span>
-            )}
           </div>
 
-          <p className="mt-1 text-xs font-semibold text-slate-600">
-            {isDraftView
-              ? "Review, edit, and publish saved property drafts before they go live."
-              : "Manage, publish, inspect, and verify real estate listings with rich multi-media showcase."}
+          <p className="mt-1 text-xs sm:text-sm font-semibold text-slate-600">
+            Manage, publish, inspect, and verify real estate listings with rich multi-media showcase.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             onClick={handleAddNewProperty}
-            className="h-11 rounded-2xl bg-gradient-to-r from-primary to-rose-600 px-5 font-black text-white shadow-md shadow-primary/25 hover:opacity-95"
+            className="h-11 rounded-2xl bg-gradient-to-r from-primary via-rose-700 to-rose-600 px-5 font-black text-white shadow-md shadow-primary/25 hover:opacity-95 transition-all flex items-center"
           >
             <Plus className="mr-2 h-4 w-4 stroke-[3]" />
             Add Property
           </Button>
-
-          <Button
-            variant={isDraftView ? "default" : "outline"}
-            onClick={() => {
-              setIsDraftView(!isDraftView);
-              clearFilters();
-            }}
-            className={`h-11 rounded-2xl px-4 font-black transition flex items-center gap-2 ${isDraftView
-              ? "bg-purple-900 text-white hover:bg-purple-950 shadow-md shadow-purple-900/30 border border-purple-950"
-              : "border-2 border-purple-800 text-purple-900 hover:bg-purple-100/70 hover:text-purple-950 bg-purple-50 shadow-xs"
-              }`}
-            title={
-              isDraftView
-                ? "Return to active portfolio"
-                : "View unpublished draft properties"
-            }
-          >
-            <FileText
-              className={`h-4 w-4 stroke-[2.5] ${isDraftView ? "text-amber-300" : "text-purple-800"
-                }`}
-            />
-
-            <span>
-              {isDraftView
-                ? "Live Portfolio"
-                : `Drafts${stats.draft ? ` (${stats.draft})` : ""}`}
-            </span>
-          </Button>
         </div>
       </div>
-
-      {isDraftView && (
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border-2 border-purple-300 bg-gradient-to-r from-purple-100 via-purple-50 to-indigo-50 px-5 py-3.5 text-xs shadow-xs">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-800 text-white font-black text-xs shrink-0 shadow-sm">
-              <FileText className="h-5 w-5 text-amber-300" />
-            </div>
-
-            <div>
-              <p className="font-black text-purple-950 text-sm">
-                Admin Drafts Archive ({properties.length}{" "}
-                {properties.length === 1
-                  ? "draft listing"
-                  : "draft listings"})
-              </p>
-
-              <p className="text-xs text-purple-900 font-semibold mt-0.5">
-                Drafts are confidential for internal editing and are
-                completely hidden from the public website until published.
-              </p>
-            </div>
-          </div>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsDraftView(false)}
-            className="h-8.5 rounded-xl text-xs font-black border-2 border-purple-800 text-purple-900 bg-white hover:bg-purple-100 shadow-xs shrink-0"
-          >
-            Back to Live Properties
-          </Button>
-        </div>
-      )}
 
       <PropertyStatsCards
         stats={stats}
@@ -2049,18 +1985,14 @@ const Properties = () => {
           </div>
 
           <div>
-            <h3 className="text-base font-black text-slate-950">
-              {isDraftView
-                ? "No draft properties found"
-                : "No properties match your query"}
+            <h3 className="text-base font-black text-slate-950 font-heading">
+              No properties match your query
             </h3>
 
             <p className="mt-1 text-xs font-semibold text-slate-600">
-              {isDraftView
-                ? "You don't have any saved drafts. Create a property and click 'Save as Draft' to store it here."
-                : hasActiveFilters
-                  ? "Try adjusting your search criteria or clearing filters."
-                  : "Get started by publishing your first property listing."}
+              {hasActiveFilters
+                ? "Try adjusting your search criteria or clearing filters."
+                : "Get started by publishing your first property listing."}
             </p>
           </div>
 
@@ -2213,13 +2145,18 @@ const Properties = () => {
         <DialogContent className="w-[92vw] max-w-sm rounded-3xl p-6 border border-slate-200">
           <div className="flex flex-col items-center text-center">
             <div
-              className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${messageType === "success"
-                ? "bg-emerald-500/10 text-emerald-600"
-                : "bg-rose-500/10 text-rose-600"
-                }`}
+              className={`mb-3.5 flex h-14 w-14 items-center justify-center rounded-2xl ${
+                messageType === "success"
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : messageType === "info"
+                  ? "bg-blue-500/10 text-blue-600"
+                  : "bg-rose-500/10 text-rose-600"
+              }`}
             >
               {messageType === "success" ? (
                 <CheckCircle2 className="h-7 w-7 stroke-[2.5]" />
+              ) : messageType === "info" ? (
+                <Info className="h-7 w-7 stroke-[2.5]" />
               ) : (
                 <AlertCircle className="h-7 w-7 stroke-[2.5]" />
               )}
