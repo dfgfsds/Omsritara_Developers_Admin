@@ -32,9 +32,19 @@ axiosInstance.interceptors.response.use(
         return response;
     },
     (error) => {
-        if (error.response && error.response.status === 401) {
+        const isSuppEndpoint =
+            Boolean((error.config as any)?.skipAuthRedirect) ||
+            String(error.config?.url || "").includes("/user");
+
+        if (error.response && error.response.status === 401 && !isSuppEndpoint) {
             localStorage.removeItem("token");
+            localStorage.removeItem("accessToken");
+            localStorage.removeItem("refreshToken");
             localStorage.removeItem("user");
+            localStorage.removeItem("ost_user_role");
+            localStorage.removeItem("roleType");
+            localStorage.removeItem("ost_agent_id");
+            localStorage.removeItem("ost_simulated_role");
             if (window.location.pathname !== "/login") {
                 window.location.href = "/login";
             }

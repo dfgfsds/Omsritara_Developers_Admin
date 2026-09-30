@@ -37,7 +37,6 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { useAuth } from "@/context/AuthContext";
 import axiosInstance from "@/lib/axiosInstance";
-import { getStoredAgents } from "@/data/mockAgentsData";
 import { cn } from "@/lib/utils";
 
 // App navigation items with searchable keywords
@@ -270,14 +269,22 @@ export function DashboardHeader() {
     setIsOpen(false);
     const searchTerm = prop.name || "";
     setQuery("");
-    navigate(`/properties?search=${encodeURIComponent(searchTerm)}`);
+    navigate(
+      isAgent
+        ? `/agent/properties?search=${encodeURIComponent(searchTerm)}`
+        : `/properties?search=${encodeURIComponent(searchTerm)}`
+    );
   };
 
   const handleSelectEnquiry = (enq: any) => {
     setIsOpen(false);
     const searchTerm = enq.name || "";
     setQuery("");
-    navigate(`/enquiries?search=${encodeURIComponent(searchTerm)}`);
+    navigate(
+      isAgent
+        ? `/agent/enquiries?search=${encodeURIComponent(searchTerm)}`
+        : `/enquiries?search=${encodeURIComponent(searchTerm)}`
+    );
   };
 
   const handleFormSubmit = (e: React.FormEvent) => {
@@ -678,15 +685,31 @@ export function DashboardHeader() {
               </>
             )}
 
-            <DropdownMenuItem onClick={() => navigate("/properties")} className="cursor-pointer font-semibold text-xs">
+            <DropdownMenuItem
+              onClick={() => navigate(isAgent ? "/agent/properties" : "/properties")}
+              className="cursor-pointer font-semibold text-xs"
+            >
               <Building2 className="mr-2 h-4 w-4 text-slate-500" />
               {isAgent ? "My Properties Portfolio" : "Properties Portfolio"}
             </DropdownMenuItem>
 
             {isAgent && (
-              <DropdownMenuItem onClick={() => navigate("/enquiries")} className="cursor-pointer font-semibold text-xs">
+              <DropdownMenuItem
+                onClick={() => navigate("/agent/enquiries")}
+                className="cursor-pointer font-semibold text-xs"
+              >
                 <MessageCircle className="mr-2 h-4 w-4 text-slate-500" />
                 My Client Enquiries
+              </DropdownMenuItem>
+            )}
+
+            {isAgent && (
+              <DropdownMenuItem
+                onClick={() => navigate("/agent/profile")}
+                className="cursor-pointer font-semibold text-xs"
+              >
+                <User className="mr-2 h-4 w-4 text-slate-500" />
+                My Profile
               </DropdownMenuItem>
             )}
 
