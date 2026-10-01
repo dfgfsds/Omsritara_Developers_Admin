@@ -16,6 +16,7 @@ const LATEST_DRAFT_KEY = "oms_property_latest_draft_id";
 
 /**
  * Checks if the current form data has meaningful content worth saving as a draft.
+ * Dropdown defaults (type, city, developer_name, agent_id) do NOT qualify as user content.
  */
 export const isFormDirtyOrHasContent = (
   formData: PropertyFormData,
@@ -28,21 +29,37 @@ export const isFormDirtyOrHasContent = (
     return JSON.stringify(formData) !== JSON.stringify(initialData);
   }
 
-  // If creating new property, check if any meaningful field is filled
+  // If creating new property, check if any REAL USER CONTENT is filled
+  const hasName = Boolean(formData.name?.trim());
+  const hasPrice = Boolean(
+    formData.price !== undefined &&
+    formData.price !== null &&
+    String(formData.price).trim() !== "" &&
+    String(formData.price).trim() !== "0"
+  );
+  const hasDescription = Boolean(formData.description?.trim());
+  const hasAddress = Boolean(formData.address?.trim() || formData.area?.trim());
+  const hasAreaSize = Boolean(
+    formData.area_size !== undefined &&
+    formData.area_size !== null &&
+    String(formData.area_size).trim() !== "" &&
+    String(formData.area_size).trim() !== "0"
+  );
+  const hasImages = Array.isArray(formData.image_url) && formData.image_url.length > 0;
+  const hasAmenities = Array.isArray(formData.amenities_data) && formData.amenities_data.length > 0;
+  const hasNearby = Array.isArray(formData.nearby_places) && formData.nearby_places.length > 0;
+  const hasCustomMedia = Boolean(formData.map_url?.trim() || formData.media_url?.trim());
+
   return Boolean(
-    formData.name?.trim() ||
-    formData.type?.trim() ||
-    formData.price?.toString().trim() ||
-    formData.description?.trim() ||
-    formData.address?.trim() ||
-    formData.area?.trim() ||
-    formData.city?.trim() ||
-    formData.area_size?.toString().trim() ||
-    (Array.isArray(formData.image_url) && formData.image_url.length > 0) ||
-    (Array.isArray(formData.amenities_data) && formData.amenities_data.length > 0) ||
-    (Array.isArray(formData.nearby_places) && formData.nearby_places.length > 0) ||
-    formData.map_url?.trim() ||
-    formData.media_url?.trim()
+    hasName ||
+    hasPrice ||
+    hasDescription ||
+    hasAddress ||
+    hasAreaSize ||
+    hasImages ||
+    hasAmenities ||
+    hasNearby ||
+    hasCustomMedia
   );
 };
 
@@ -60,6 +77,11 @@ export const saveLocalDraft = (
   }
 ): StoredPropertyDraft | null => {
   try {
+    // Safety check: Never save a ghost draft if form has no user content
+    if (!isFormDirtyOrHasContent(data.formData, data.editingProperty ? null : undefined)) {
+      return null;
+    }
+
     const key = `${DRAFT_PREFIX}${draftId || "new"}`;
     const name =
       data.name?.trim() ||
@@ -183,4 +205,46 @@ export const formatDraftTime = (timestamp: number): string => {
     hour: "2-digit",
     minute: "2-digit",
   });
+};
+
+/**
+ * Retrieves all stored drafts from localStorage sorted by latest timestamp first.
+ */
+export const getAllLocalDrafts = (): StoredPropertyDraft[] => {
+  try {
+    const drafts: StoredPropertyDraft[] = [];
+    const keysToRemove: string[] = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const storageKey = localStorage.key(i);
+      if (storageKey && storageKey.startsWith(DRAFT_PREFIX) && storageKey !== LATEST_DRAFT_KEY) {
+        const raw = localStorage.getItem(storageKey);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as StoredPropertyDraft;
+            // Purge ghost drafts that have no real user content (e.g. empty auto-saved drafts)
+            if (!parsed || !isFormDirtyOrHasContent(parsed.formData, parsed.editingProperty ? null : undefined)) {
+              keysToRemove.push(storageKey);
+              continue;
+            }
+            drafts.push(parsed);
+          } catch {
+            keysToRemove.push(storageKey);
+          }
+        }
+      }
+    }
+
+    // Automatically remove ghost drafts so they don't persist
+    keysToRemove.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {}
+    });
+
+    return drafts.sort((a, b) => b.timestamp - a.timestamp);
+  } catch (error) {
+    console.error("Failed to read all local property drafts:", error);
+    return [];
+  }
 };

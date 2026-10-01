@@ -52,14 +52,33 @@ import axiosInstance from "@/lib/axiosInstance";
 import { toast } from "@/hooks/use-toast";
 import { useAuth } from "@/context/AuthContext";
 
+// Helper to ensure safe string rendering in React JSX and prevent "Objects are not valid as a React child" crashes
+const getSafeString = (val: any, fallback = ""): string => {
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (val && typeof val === "object") {
+    if (typeof val.name === "string") return val.name;
+    if (typeof val.title === "string") return val.title;
+    if (typeof val.city === "string") return val.city;
+    if (typeof val.address === "string") return val.address;
+    if (typeof val.email === "string") return val.email;
+    if (typeof val.mobile === "string" || typeof val.mobile === "number") return String(val.mobile);
+  }
+  return fallback;
+};
+
 // Soft status pill styling
-const getStatusBadgeStyles = (status: string) => {
-  switch (status?.toLowerCase()) {
+const getStatusBadgeStyles = (status: any) => {
+  const s = getSafeString(status).toLowerCase();
+  switch (s) {
     case "new":
       return "bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100";
     case "in progress":
+    case "in_progress":
     case "progress":
       return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100";
+    case "contacted":
+      return "bg-purple-50 text-purple-800 border-purple-200 hover:bg-purple-100";
     case "closed":
       return "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100";
     default:
@@ -68,16 +87,17 @@ const getStatusBadgeStyles = (status: string) => {
 };
 
 // Soft priority pill styling
-const getPriorityBadgeStyles = (priority: string) => {
-  switch (priority?.toLowerCase()) {
+const getPriorityBadgeStyles = (priority: any) => {
+  const p = getSafeString(priority).toLowerCase();
+  switch (p) {
     case "high":
-      return "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100";
+      return "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 hover:text-rose-950";
     case "medium":
-      return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100";
+      return "bg-amber-50 text-amber-800 border-amber-200 hover:bg-amber-100 hover:text-amber-950";
     case "low":
-      return "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200";
+      return "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:text-slate-950";
     default:
-      return "bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200";
+      return "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 hover:text-slate-950";
   }
 };
 
@@ -138,22 +158,27 @@ const Enquiries = () => {
     High: "Low",
   };
 
-  const formatStatus = (status: string) => {
-    switch (status?.toLowerCase()) {
+  const formatStatus = (status: any) => {
+    const s = getSafeString(status).toLowerCase();
+    switch (s) {
       case "new":
         return "New";
       case "progress":
       case "in progress":
+      case "in_progress":
         return "In Progress";
+      case "contacted":
+        return "Contacted";
       case "closed":
         return "Closed";
       default:
-        return "Unknown";
+        return getSafeString(status, "New");
     }
   };
 
-  const formatPriority = (priority: string) => {
-    switch (priority?.toLowerCase()) {
+  const formatPriority = (priority: any) => {
+    const p = getSafeString(priority).toLowerCase();
+    switch (p) {
       case "high":
         return "High";
       case "medium":
@@ -161,7 +186,7 @@ const Enquiries = () => {
       case "low":
         return "Low";
       default:
-        return "Unknown";
+        return getSafeString(priority, "Medium");
     }
   };
 
@@ -174,28 +199,43 @@ const Enquiries = () => {
         axiosInstance.get("/user"),
       ]);
 
-      const rawEnquiries =
-        resEnq.status === "fulfilled" && resEnq.value?.data?.result
-          ? resEnq.value.data.result
-          : Array.isArray(resEnq.status === "fulfilled" && resEnq.value?.data)
-          ? resEnq.value.data
+      let rawEnquiries: any[] = [];
+      if (resEnq.status === "fulfilled") {
+        const d = (resEnq as PromiseFulfilledResult<any>).value?.data;
+        rawEnquiries = Array.isArray(d?.result)
+          ? d.result
+          : Array.isArray(d?.data)
+          ? d.data
+          : Array.isArray(d)
+          ? d
           : [];
+      }
 
       // Properties lookup for unpopulated references
-      const propertiesList =
-        resProp.status === "fulfilled" && Array.isArray(resProp.value?.data?.result)
-          ? resProp.value.data.result
-          : Array.isArray(resProp.status === "fulfilled" && resProp.value?.data)
-          ? resProp.value.data
+      let propertiesList: any[] = [];
+      if (resProp.status === "fulfilled") {
+        const d = (resProp as PromiseFulfilledResult<any>).value?.data;
+        propertiesList = Array.isArray(d?.result)
+          ? d.result
+          : Array.isArray(d?.data)
+          ? d.data
+          : Array.isArray(d)
+          ? d
           : [];
+      }
 
       // Live registered agents lookup list from real API users
-      const allUsers =
-        resAgents.status === "fulfilled" && Array.isArray(resAgents.value?.data?.result)
-          ? resAgents.value.data.result
-          : Array.isArray(resAgents.status === "fulfilled" && resAgents.value?.data)
-          ? resAgents.value.data
+      let allUsers: any[] = [];
+      if (resAgents.status === "fulfilled") {
+        const d = (resAgents as PromiseFulfilledResult<any>).value?.data;
+        allUsers = Array.isArray(d?.result)
+          ? d.result
+          : Array.isArray(d?.data)
+          ? d.data
+          : Array.isArray(d)
+          ? d
           : [];
+      }
 
       const apiAgents = allUsers.filter((u: any) => {
         const roleStr = String(
@@ -276,25 +316,27 @@ const Enquiries = () => {
             : "";
 
         return {
-          id: item._id,
-          name: item.name || "Customer",
-          email: item.email || "-",
-          mobile: item.mobile || "-",
+          id: String(item._id || item.id || ""),
+          name: getSafeString(item.name, "Customer"),
+          email: getSafeString(item.email, "-"),
+          mobile: item.mobile ? String(item.mobile) : "-",
           propertyId: matchedProp?._id || (typeof item.property === "string" ? item.property : "-"),
-          propertyName: matchedProp?.name || matchedProp?.title || item.propertyName || "General Inquiry",
+          propertyName: getSafeString(
+            matchedProp?.name || matchedProp?.title || item.propertyName,
+            "General Inquiry"
+          ),
           propertyLocation: propLoc,
-          message:
-            item.description ||
-            item.message ||
-            matchedProp?.description ||
-            "No message provided",
+          message: getSafeString(
+            item.description || item.message || matchedProp?.description,
+            "No message provided"
+          ),
           agentId: candidateAgentId || resolvedAgent?._id || null,
-          agentName,
-          agentEmail: resolvedAgent?.email || "",
-          agentMobile: resolvedAgent?.mobile || "",
+          agentName: getSafeString(agentName, "Admin Direct"),
+          agentEmail: getSafeString(resolvedAgent?.email),
+          agentMobile: getSafeString(resolvedAgent?.mobile),
           status: formatStatus(item.status),
           priority: formatPriority(item.priority),
-          source: item.source || "API",
+          source: getSafeString(item.source, "API"),
           createdAt: item.createdAt || new Date().toISOString(),
           followUpDate: item.followUpDate || null,
         };
@@ -367,19 +409,26 @@ const Enquiries = () => {
 
   // Open Edit Modal
   const handleOpenEdit = (enquiry: any) => {
+    if (!enquiry) return;
+    const rawMobile = getSafeString(enquiry.mobile);
+    const cleanMobile = rawMobile === "-" ? "" : rawMobile;
+    const rawEmail = getSafeString(enquiry.email);
+    const cleanEmail = rawEmail === "-" ? "" : rawEmail;
+    const rawMsg = getSafeString(enquiry.message);
+
     setEditFormData({
-      id: enquiry.id,
-      name: enquiry.name || "",
-      email: enquiry.email || "",
-      mobile: enquiry.mobile ? String(enquiry.mobile) : "",
+      id: String(enquiry.id || enquiry._id || ""),
+      name: getSafeString(enquiry.name),
+      email: cleanEmail,
+      mobile: cleanMobile,
       message:
-        enquiry.message && enquiry.message !== "No message provided"
-          ? enquiry.message
+        rawMsg && rawMsg !== "No message provided"
+          ? rawMsg
           : "",
-      status: enquiry.status || "New",
-      priority: enquiry.priority || "Medium",
-      agentId: enquiry.agentId || "",
-      propertyName: enquiry.propertyName || "General Inquiry",
+      status: formatStatus(enquiry.status),
+      priority: formatPriority(enquiry.priority),
+      agentId: getSafeString(enquiry.agentId),
+      propertyName: getSafeString(enquiry.propertyName, "General Inquiry"),
     });
     setIsEditDialogOpen(true);
   };
@@ -391,12 +440,21 @@ const Enquiries = () => {
 
     setIsUpdating(true);
     try {
-      const assignedAg = registeredAgents.find((a) => a._id === editFormData.agentId);
+      const assignedAg = registeredAgents.find(
+        (a) => String(a._id) === String(editFormData.agentId)
+      );
       const updatedAgentName = assignedAg
-        ? assignedAg.name
+        ? getSafeString(assignedAg.name, "Assigned Agent")
         : editFormData.agentId
         ? "Assigned Agent"
         : "Admin Direct";
+
+      const cleanName = getSafeString(editFormData.name).trim();
+      const cleanEmail = getSafeString(editFormData.email).trim().toLowerCase();
+      // Extract numeric digits, taking last 10 digits if full international phone entered
+      const digitsOnly = getSafeString(editFormData.mobile).replace(/\D/g, "");
+      const cleanMobile = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+      const cleanMsg = getSafeString(editFormData.message).trim();
 
       // 1. Optimistic local state update
       setEnquiries((prev) =>
@@ -404,16 +462,16 @@ const Enquiries = () => {
           item.id === editFormData.id
             ? {
                 ...item,
-                name: editFormData.name,
-                email: editFormData.email,
-                mobile: editFormData.mobile,
-                message: editFormData.message,
+                name: cleanName || item.name,
+                email: cleanEmail || item.email,
+                mobile: cleanMobile || item.mobile,
+                message: cleanMsg || item.message,
                 status: editFormData.status,
                 priority: editFormData.priority,
                 agentId: editFormData.agentId || null,
                 agentName: updatedAgentName,
-                agentMobile: assignedAg?.mobile || item.agentMobile,
-                agentEmail: assignedAg?.email || item.agentEmail,
+                agentMobile: getSafeString(assignedAg?.mobile || item.agentMobile),
+                agentEmail: getSafeString(assignedAg?.email || item.agentEmail),
               }
             : item
         )
@@ -423,44 +481,53 @@ const Enquiries = () => {
       if (selectedEnquiry && selectedEnquiry.id === editFormData.id) {
         setSelectedEnquiry((prev: any) => ({
           ...prev,
-          name: editFormData.name,
-          email: editFormData.email,
-          mobile: editFormData.mobile,
-          message: editFormData.message,
+          name: cleanName || prev.name,
+          email: cleanEmail || prev.email,
+          mobile: cleanMobile || prev.mobile,
+          message: cleanMsg || prev.message,
           status: editFormData.status,
           priority: editFormData.priority,
           agentId: editFormData.agentId || null,
           agentName: updatedAgentName,
-          agentMobile: assignedAg?.mobile || prev.agentMobile,
-          agentEmail: assignedAg?.email || prev.agentEmail,
+          agentMobile: getSafeString(assignedAg?.mobile || prev.agentMobile),
+          agentEmail: getSafeString(assignedAg?.email || prev.agentEmail),
         }));
       }
 
-      // 2. Call backend PUT /enquiry/:id
+      // 2. Call backend PUT /enquiry/:id with clean validated payload
       const payload: any = {
-        name: editFormData.name.trim(),
+        name: cleanName || "Client Lead",
         status: editFormData.status.toLowerCase(),
         priority: editFormData.priority.toLowerCase(),
       };
-      if (editFormData.email.trim()) payload.email = editFormData.email.trim();
-      if (editFormData.mobile.trim()) payload.mobile = editFormData.mobile.trim();
-      if (editFormData.message.trim()) payload.description = editFormData.message.trim();
+      if (cleanEmail && cleanEmail !== "-") payload.email = cleanEmail;
+      if (cleanMobile && cleanMobile.length === 10) payload.mobile = cleanMobile;
+      if (cleanMsg) payload.description = cleanMsg;
       if (editFormData.agentId) payload.agent = editFormData.agentId;
 
       await axiosInstance.put(`/enquiry/${editFormData.id}`, payload);
 
       toast({
         title: "Enquiry Updated",
-        description: `Lead from ${editFormData.name} has been updated successfully.`,
+        description: `Lead from ${cleanName || "Client"} has been updated successfully.`,
       });
 
       setIsEditDialogOpen(false);
     } catch (error: any) {
       console.error("Error updating enquiry:", error);
-      toast({
-        title: "Saved Locally",
-        description: "Enquiry updated in admin pipeline.",
-      });
+      const serverMsg = error.response?.data?.msg || error.response?.data?.message;
+      if (serverMsg) {
+        toast({
+          title: "Update Alert",
+          description: serverMsg,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Saved Locally",
+          description: "Enquiry updated in admin pipeline.",
+        });
+      }
       setIsEditDialogOpen(false);
     } finally {
       setIsUpdating(false);
@@ -526,16 +593,20 @@ const Enquiries = () => {
 
   // Metric stats
   const stats = useMemo(() => {
-    const agentLeadsCount = enquiries.filter(
-      (e) => e.agentName && !e.agentName.toLowerCase().includes("admin")
-    ).length;
+    const agentLeadsCount = enquiries.filter((e) => {
+      const agName = getSafeString(e.agentName);
+      return agName && !agName.toLowerCase().includes("admin");
+    }).length;
 
     return {
       total: enquiries.length,
       agentLeads: agentLeadsCount,
-      new: enquiries.filter((e) => e.status === "New").length,
-      inProgress: enquiries.filter((e) => e.status === "In Progress").length,
-      closed: enquiries.filter((e) => e.status === "Closed").length,
+      new: enquiries.filter((e) => getSafeString(e.status).toLowerCase() === "new").length,
+      inProgress: enquiries.filter((e) => {
+        const s = getSafeString(e.status).toLowerCase();
+        return s === "in progress" || s === "in_progress" || s === "progress" || s === "contacted";
+      }).length,
+      closed: enquiries.filter((e) => getSafeString(e.status).toLowerCase() === "closed").length,
     };
   }, [enquiries]);
 
@@ -543,7 +614,7 @@ const Enquiries = () => {
   const availableAgents = useMemo(() => {
     const map = new Map<string, { id: string; name: string; count: number }>();
     enquiries.forEach((e) => {
-      const name = e.agentName?.trim();
+      const name = getSafeString(e.agentName).trim();
       if (name && !name.toLowerCase().includes("admin")) {
         const existing = map.get(name);
         if (existing) {
@@ -560,13 +631,13 @@ const Enquiries = () => {
   const filteredEnquiries = useMemo(() => {
     return enquiries.filter((enquiry) => {
       const q = searchTerm.toLowerCase().trim();
-      const name = String(enquiry.name || "").toLowerCase();
-      const email = String(enquiry.email || "").toLowerCase();
-      const mobile = String(enquiry.mobile || "").toLowerCase();
-      const prop = String(enquiry.propertyName || "").toLowerCase();
-      const agent = String(enquiry.agentName || "").toLowerCase();
-      const msg = String(enquiry.message || "").toLowerCase();
-      const status = String(enquiry.status || "").toLowerCase();
+      const name = getSafeString(enquiry.name).toLowerCase();
+      const email = getSafeString(enquiry.email).toLowerCase();
+      const mobile = getSafeString(enquiry.mobile).toLowerCase();
+      const prop = getSafeString(enquiry.propertyName).toLowerCase();
+      const agent = getSafeString(enquiry.agentName).toLowerCase();
+      const msg = getSafeString(enquiry.message).toLowerCase();
+      const status = getSafeString(enquiry.status).toLowerCase();
 
       const matchesSearch =
         !q ||
@@ -580,24 +651,24 @@ const Enquiries = () => {
 
       const matchesStatus =
         statusFilter === "All" ||
-        enquiry.status?.toLowerCase() === statusFilter.toLowerCase();
+        status === statusFilter.toLowerCase();
 
       const matchesPriority =
         priorityFilter === "All" ||
-        enquiry.priority?.toLowerCase() === priorityFilter.toLowerCase();
+        getSafeString(enquiry.priority).toLowerCase() === priorityFilter.toLowerCase();
 
       let matchesAgent = true;
       if (agentFilter === "agents_only") {
         matchesAgent = Boolean(
-          enquiry.agentName && !enquiry.agentName.toLowerCase().includes("admin")
+          agent && !agent.includes("admin")
         );
       } else if (agentFilter === "admin_direct") {
         matchesAgent = Boolean(
-          !enquiry.agentName || enquiry.agentName.toLowerCase().includes("admin")
+          !agent || agent.includes("admin")
         );
       } else if (agentFilter !== "All") {
         matchesAgent =
-          enquiry.agentName?.toLowerCase() === agentFilter.toLowerCase();
+          agent === agentFilter.toLowerCase();
       }
 
       return matchesSearch && matchesStatus && matchesPriority && matchesAgent;
@@ -971,16 +1042,22 @@ const Enquiries = () => {
                 </TableRow>
               ) : (
                 [...filteredEnquiries].reverse().map((enquiry) => {
-                  const initials = (enquiry.name || "U")
-                    .split(" ")
-                    .map((n: string) => n[0])
-                    .slice(0, 2)
-                    .join("")
-                    .toUpperCase();
+                  const safeName = getSafeString(enquiry.name, "Customer");
+                  const words = safeName.trim().split(/\s+/).filter(Boolean);
+                  const initials = words.length > 0
+                    ? words.map((w) => w[0] || "").slice(0, 2).join("").toUpperCase()
+                    : "U";
 
+                  const safeAgent = getSafeString(enquiry.agentName, "Admin Direct");
                   const isAgentProp =
-                    enquiry.agentName &&
-                    !enquiry.agentName.toLowerCase().includes("admin");
+                    safeAgent &&
+                    !safeAgent.toLowerCase().includes("admin");
+
+                  const safeMobile = getSafeString(enquiry.mobile, "—");
+                  const safeEmail = getSafeString(enquiry.email, "—");
+                  const safeProp = getSafeString(enquiry.propertyName, "General Inquiry");
+                  const safeLoc = getSafeString(enquiry.propertyLocation);
+                  const safeAgentMobile = getSafeString(enquiry.agentMobile);
 
                   return (
                     <TableRow
@@ -995,7 +1072,7 @@ const Enquiries = () => {
                           </div>
                           <div>
                             <p className="font-black text-slate-950 text-xs tracking-tight">
-                              {enquiry.name || "Anonymous Lead"}
+                              {safeName}
                             </p>
                             <p className="text-[10px] text-slate-500 font-semibold">
                               Web Inquiry
@@ -1007,22 +1084,30 @@ const Enquiries = () => {
                       {/* Contact Details */}
                       <TableCell className="px-4 py-3.5 text-xs">
                         <div className="space-y-1">
-                          <a
-                            href={enquiry.mobile ? `tel:${enquiry.mobile}` : undefined}
-                            className="flex items-center gap-1.5 text-slate-700 font-semibold hover:text-primary transition-colors"
-                            title="Click to dial"
-                          >
-                            <Phone className="h-3 w-3 text-slate-400 shrink-0" />
-                            <span>{enquiry.mobile || "—"}</span>
-                          </a>
-                          <a
-                            href={enquiry.email ? `mailto:${enquiry.email}` : undefined}
-                            className="flex items-center gap-1.5 text-slate-500 font-medium truncate max-w-[180px] hover:text-primary transition-colors"
-                            title="Click to email"
-                          >
-                            <Mail className="h-3 w-3 text-slate-400 shrink-0" />
-                            <span className="truncate">{enquiry.email || "—"}</span>
-                          </a>
+                          {safeMobile !== "—" ? (
+                            <a
+                              href={`tel:${safeMobile}`}
+                              className="flex items-center gap-1.5 text-slate-700 font-semibold hover:text-primary transition-colors"
+                              title="Click to dial"
+                            >
+                              <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span>{safeMobile}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
+                          {safeEmail !== "—" ? (
+                            <a
+                              href={`mailto:${safeEmail}`}
+                              className="flex items-center gap-1.5 text-slate-500 font-medium truncate max-w-[180px] hover:text-primary transition-colors"
+                              title="Click to email"
+                            >
+                              <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{safeEmail}</span>
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 text-xs block">—</span>
+                          )}
                         </div>
                       </TableCell>
 
@@ -1033,16 +1118,14 @@ const Enquiries = () => {
                             <Building className="h-3.5 w-3.5 text-primary shrink-0" />
                             <span
                               className="font-bold text-xs text-slate-900 line-clamp-1 max-w-[180px]"
-                              title={enquiry.propertyName}
+                              title={safeProp}
                             >
-                              {enquiry.propertyName && enquiry.propertyName !== "-"
-                                ? enquiry.propertyName
-                                : "General Inquiry"}
+                              {safeProp}
                             </span>
                           </div>
-                          {enquiry.propertyLocation ? (
+                          {safeLoc ? (
                             <p className="text-[10px] text-slate-500 font-medium truncate max-w-[180px]">
-                              {enquiry.propertyLocation}
+                              {safeLoc}
                             </p>
                           ) : (
                             <p className="text-[10px] text-slate-400 font-medium">
@@ -1058,25 +1141,25 @@ const Enquiries = () => {
                           <div className="space-y-1">
                             <button
                               type="button"
-                              onClick={() => setAgentFilter(enquiry.agentName)}
-                              title={`Click to filter only ${enquiry.agentName}'s enquiries`}
+                              onClick={() => setAgentFilter(safeAgent)}
+                              title={`Click to filter only ${safeAgent}'s enquiries`}
                               className="group inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black bg-gradient-to-r from-amber-50 to-orange-50 text-amber-900 border border-amber-200/90 shadow-2xs hover:border-amber-400 hover:bg-amber-100 transition-all text-left"
                             >
                               <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-amber-200/80 text-amber-950 text-[10px] font-black group-hover:scale-110 transition-transform">
-                                {enquiry.agentName.charAt(0).toUpperCase()}
+                                {safeAgent.charAt(0).toUpperCase()}
                               </div>
                               <span className="truncate max-w-[120px] font-extrabold">
-                                {enquiry.agentName}
+                                {safeAgent}
                               </span>
                             </button>
-                            {enquiry.agentMobile && (
+                            {safeAgentMobile && (
                               <a
-                                href={`tel:${enquiry.agentMobile}`}
+                                href={`tel:${safeAgentMobile}`}
                                 className="flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-amber-800 transition-colors pl-1"
                                 title="Call agent directly"
                               >
                                 <Phone className="h-2.5 w-2.5 text-amber-600" />
-                                <span>{enquiry.agentMobile}</span>
+                                <span>{safeAgentMobile}</span>
                               </a>
                             )}
                           </div>
@@ -1145,28 +1228,32 @@ const Enquiries = () => {
                           </Button>
 
                           {/* Edit Button */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            title="Edit enquiry details, status, priority, or assigned agent"
-                            onClick={() => handleOpenEdit(enquiry)}
-                            className="h-8 px-2.5 rounded-xl text-xs font-bold border-amber-200 text-amber-800 bg-amber-50/60 hover:bg-amber-100 hover:text-amber-950 transition-all shadow-2xs flex items-center gap-1.5"
-                          >
-                            <Edit2 className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">Edit</span>
-                          </Button>
+                          {(!isAgent || isAdmin) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              title="Edit enquiry details, status, priority, or assigned agent"
+                              onClick={() => handleOpenEdit(enquiry)}
+                              className="h-8 px-2.5 rounded-xl text-xs font-bold border-amber-200 text-amber-800 bg-amber-50/60 hover:bg-amber-100 hover:text-amber-950 transition-all shadow-2xs flex items-center gap-1.5"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                              <span className="hidden xl:inline">Edit</span>
+                            </Button>
+                          )}
 
                           {/* Delete Button */}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            title="Delete customer enquiry"
-                            onClick={() => handleOpenDelete(enquiry)}
-                            className="h-8 px-2.5 rounded-xl text-xs font-bold border-rose-200 text-rose-700 bg-rose-50/60 hover:bg-rose-100 hover:text-rose-900 transition-all shadow-2xs flex items-center gap-1.5"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span className="hidden xl:inline">Delete</span>
-                          </Button>
+                          {(!isAgent || isAdmin) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              title="Delete customer enquiry"
+                              onClick={() => handleOpenDelete(enquiry)}
+                              className="h-8 px-2.5 rounded-xl text-xs font-bold border-rose-200 text-rose-700 bg-rose-50/60 hover:bg-rose-100 hover:text-rose-900 transition-all shadow-2xs flex items-center gap-1.5"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="hidden xl:inline">Delete</span>
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1197,155 +1284,163 @@ const Enquiries = () => {
             </div>
           </DialogHeader>
 
-          {selectedEnquiry && (
-            <div className="space-y-4 py-2">
-              {/* Client Info Card */}
-              <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Client Name
-                    </span>
-                    <h4 className="text-base font-black text-slate-950">
-                      {selectedEnquiry.name || "Anonymous Lead"}
-                    </h4>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${getStatusBadgeStyles(
-                        selectedEnquiry.status
-                      )}`}
-                    >
-                      {selectedEnquiry.status}
-                    </span>
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getPriorityBadgeStyles(
-                        selectedEnquiry.priority
-                      )}`}
-                    >
-                      {selectedEnquiry.priority}
-                    </span>
-                  </div>
-                </div>
+          {selectedEnquiry && (() => {
+            const safeSelName = getSafeString(selectedEnquiry.name, "Anonymous Lead");
+            const safeSelMobile = getSafeString(selectedEnquiry.mobile, "—");
+            const safeSelEmail = getSafeString(selectedEnquiry.email, "—");
+            const safeSelProp = getSafeString(selectedEnquiry.propertyName, "General Real Estate Inquiry");
+            const safeSelLoc = getSafeString(selectedEnquiry.propertyLocation);
+            const safeSelAgent = getSafeString(selectedEnquiry.agentName, "Admin Direct");
+            const safeSelAgentMobile = getSafeString(selectedEnquiry.agentMobile);
+            const safeSelAgentEmail = getSafeString(selectedEnquiry.agentEmail);
+            const isSelAgentProp = safeSelAgent && !safeSelAgent.toLowerCase().includes("admin");
+            const safeSelMsg = getSafeString(selectedEnquiry.message, "No custom message attached with this inquiry.");
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/70 text-xs">
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-extrabold uppercase text-slate-500">
-                      Phone Number
-                    </span>
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                      <Phone className="h-3 w-3 text-slate-400" />
-                      <span>{selectedEnquiry.mobile || "—"}</span>
+            return (
+              <div className="space-y-4 py-2">
+                {/* Client Info Card */}
+                <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                        Client Name
+                      </span>
+                      <h4 className="text-base font-black text-slate-950">
+                        {safeSelName}
+                      </h4>
                     </div>
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="text-[10px] font-extrabold uppercase text-slate-500">
-                      Email Address
-                    </span>
-                    <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate">
-                      <Mail className="h-3 w-3 text-slate-400" />
-                      <span className="truncate">{selectedEnquiry.email || "—"}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Target Property & Assigned Agent Dossier */}
-              <div className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/20 p-4 space-y-3 shadow-xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Building className="h-4 w-4 text-amber-700" />
-                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">
-                      Property Listing & Responsible Agent
-                    </span>
-                  </div>
-                  {selectedEnquiry.agentName &&
-                  !selectedEnquiry.agentName.toLowerCase().includes("admin") ? (
-                    <span className="rounded-full bg-amber-100 text-amber-900 text-[10px] font-black px-2.5 py-0.5 border border-amber-200">
-                      Agent Listing
-                    </span>
-                  ) : (
-                    <span className="rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 border border-slate-200">
-                      Company Direct
-                    </span>
-                  )}
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-extrabold uppercase text-slate-400">
-                    Interested Property
-                  </span>
-                  <h4 className="text-sm font-black text-slate-950 flex items-center gap-1.5 mt-0.5">
-                    {selectedEnquiry.propertyName && selectedEnquiry.propertyName !== "-"
-                      ? selectedEnquiry.propertyName
-                      : "General Real Estate Inquiry"}
-                  </h4>
-                  {selectedEnquiry.propertyLocation && (
-                    <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      {selectedEnquiry.propertyLocation}
-                    </p>
-                  )}
-                </div>
-
-                {/* Agent in Charge Card */}
-                <div className="rounded-xl border border-amber-200/70 bg-white p-3 space-y-2">
-                  <div className="flex items-center justify-between flex-wrap gap-2">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-900 font-black text-xs border border-amber-200 shadow-2xs">
-                        <User className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-                          Property Agent in Charge
-                        </span>
-                        <p className="text-xs font-black text-slate-950">
-                          {selectedEnquiry.agentName || "Admin Direct"}
-                        </p>
-                      </div>
-                    </div>
-
-                    {selectedEnquiry.agentMobile && (
-                      <a
-                        href={`tel:${selectedEnquiry.agentMobile}`}
-                        className="inline-flex items-center gap-1 text-xs font-black text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200 hover:bg-amber-100 transition shadow-2xs"
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-black capitalize ${getStatusBadgeStyles(
+                          selectedEnquiry.status
+                        )}`}
                       >
-                        <Phone className="h-3 w-3 text-amber-700" />
-                        Call Agent
-                      </a>
+                        {getSafeString(selectedEnquiry.status)}
+                      </span>
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${getPriorityBadgeStyles(
+                          selectedEnquiry.priority
+                        )}`}
+                      >
+                        {getSafeString(selectedEnquiry.priority)}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-200/70 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-500">
+                        Phone Number
+                      </span>
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900">
+                        <Phone className="h-3 w-3 text-slate-400" />
+                        <span>{safeSelMobile}</span>
+                      </div>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] font-extrabold uppercase text-slate-500">
+                        Email Address
+                      </span>
+                      <div className="flex items-center gap-1.5 font-bold text-slate-900 truncate">
+                        <Mail className="h-3 w-3 text-slate-400" />
+                        <span className="truncate">{safeSelEmail}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Target Property & Assigned Agent Dossier */}
+                <div className="rounded-2xl border border-amber-200/90 bg-gradient-to-br from-amber-50/40 via-white to-orange-50/20 p-4 space-y-3 shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Building className="h-4 w-4 text-amber-700" />
+                      <span className="text-[10px] font-black uppercase tracking-wider text-amber-900">
+                        Property Listing & Responsible Agent
+                      </span>
+                    </div>
+                    {isSelAgentProp ? (
+                      <span className="rounded-full bg-amber-100 text-amber-900 text-[10px] font-black px-2.5 py-0.5 border border-amber-200">
+                        Agent Listing
+                      </span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 text-slate-700 text-[10px] font-bold px-2 py-0.5 border border-slate-200">
+                        Company Direct
+                      </span>
                     )}
                   </div>
 
-                  {selectedEnquiry.agentEmail && (
-                    <div className="flex items-center gap-1.5 text-xs text-slate-600 pt-1.5 border-t border-slate-100">
-                      <Mail className="h-3 w-3 text-slate-400" />
-                      <a
-                        href={`mailto:${selectedEnquiry.agentEmail}`}
-                        className="hover:text-primary transition truncate font-medium"
-                      >
-                        {selectedEnquiry.agentEmail}
-                      </a>
-                    </div>
-                  )}
-
-                  {selectedEnquiry.agentName &&
-                    !selectedEnquiry.agentName.toLowerCase().includes("admin") && (
-                      <p className="text-[11px] font-medium text-amber-900/90 pt-1 bg-amber-50/60 p-2 rounded-lg border border-amber-100 leading-normal">
-                        📍 <strong>Agent Ownership Notice:</strong> This customer lead was generated from{" "}
-                        <strong>{selectedEnquiry.agentName}</strong>'s property listing. The agent is responsible for contacting the customer and following up on the deal.
+                  <div>
+                    <span className="text-[10px] font-extrabold uppercase text-slate-400">
+                      Interested Property
+                    </span>
+                    <h4 className="text-sm font-black text-slate-950 flex items-center gap-1.5 mt-0.5">
+                      {safeSelProp}
+                    </h4>
+                    {safeSelLoc && (
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">
+                        {safeSelLoc}
                       </p>
                     )}
-                </div>
-              </div>
+                  </div>
 
-              {/* Inquiry Message */}
-              <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  Inquiry Message / Request
-                </span>
-                <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200/70 whitespace-pre-wrap">
-                  "{selectedEnquiry.message || "No custom message attached with this inquiry."}"
-                </p>
-              </div>
+                  {/* Agent in Charge Card */}
+                  <div className="rounded-xl border border-amber-200/70 bg-white p-3 space-y-2">
+                    <div className="flex items-center justify-between flex-wrap gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-900 font-black text-xs border border-amber-200 shadow-2xs">
+                          <User className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
+                            Property Agent in Charge
+                          </span>
+                          <p className="text-xs font-black text-slate-950">
+                            {safeSelAgent}
+                          </p>
+                        </div>
+                      </div>
+
+                      {safeSelAgentMobile && (
+                        <a
+                          href={`tel:${safeSelAgentMobile}`}
+                          className="inline-flex items-center gap-1 text-xs font-black text-amber-900 bg-amber-50 px-2.5 py-1 rounded-xl border border-amber-200 hover:bg-amber-100 transition shadow-2xs"
+                        >
+                          <Phone className="h-3 w-3 text-amber-700" />
+                          Call Agent
+                        </a>
+                      )}
+                    </div>
+
+                    {safeSelAgentEmail && (
+                      <div className="flex items-center gap-1.5 text-xs text-slate-600 pt-1.5 border-t border-slate-100">
+                        <Mail className="h-3 w-3 text-slate-400" />
+                        <a
+                          href={`mailto:${safeSelAgentEmail}`}
+                          className="hover:text-primary transition truncate font-medium"
+                        >
+                          {safeSelAgentEmail}
+                        </a>
+                      </div>
+                    )}
+
+                    {isSelAgentProp && (
+                      <p className="text-[11px] font-medium text-amber-900/90 pt-1 bg-amber-50/60 p-2 rounded-lg border border-amber-100 leading-normal">
+                        📍 <strong>Agent Ownership Notice:</strong> This customer lead was generated from{" "}
+                        <strong>{safeSelAgent}</strong>'s property listing. The agent is responsible for contacting the customer and following up on the deal.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Inquiry Message */}
+                <div className="rounded-2xl border border-slate-200/90 bg-white p-4">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                    Inquiry Message / Request
+                  </span>
+                  <p className="mt-1.5 text-xs font-semibold leading-relaxed text-slate-700 bg-slate-50 p-3 rounded-xl border border-slate-200/70 whitespace-pre-wrap">
+                    "{safeSelMsg}"
+                  </p>
+                </div>
 
               {/* Quick Actions inside Dialog */}
               <div className="flex items-center justify-between pt-2 border-t border-slate-100 flex-wrap gap-2">
@@ -1378,26 +1473,26 @@ const Enquiries = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {selectedEnquiry.mobile && (
+                  {safeSelMobile && safeSelMobile !== "—" && (
                     <Button
                       asChild
                       variant="outline"
                       size="sm"
                       className="rounded-xl font-bold text-xs border-slate-300"
                     >
-                      <a href={`tel:${selectedEnquiry.mobile}`}>
+                      <a href={`tel:${safeSelMobile}`}>
                         <Phone className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
                         Call Client
                       </a>
                     </Button>
                   )}
-                  {selectedEnquiry.email && (
+                  {safeSelEmail && safeSelEmail !== "—" && (
                     <Button
                       asChild
                       size="sm"
                       className="rounded-xl font-black text-xs bg-primary text-white"
                     >
-                      <a href={`mailto:${selectedEnquiry.email}`}>
+                      <a href={`mailto:${safeSelEmail}`}>
                         <Mail className="mr-1.5 h-3.5 w-3.5" />
                         Send Email
                       </a>
@@ -1406,7 +1501,8 @@ const Enquiries = () => {
                 </div>
               </div>
             </div>
-          )}
+          );
+        })()}
         </DialogContent>
       </Dialog>
 

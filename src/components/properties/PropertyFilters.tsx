@@ -59,7 +59,7 @@ export const PropertyFilters: React.FC<PropertyFiltersProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search by title, location, type, project, or config (e.g. Villa, 3 BHK, OMR)..."
-            className="h-10 rounded-xl pl-10 pr-10 text-xs font-semibold text-slate-900 border-slate-200 placeholder:text-slate-400 focus-visible:ring-2 focus-visible:ring-primary/20"
+            className="h-11 rounded-xl pl-10 pr-10 text-xs sm:text-sm font-bold text-slate-950 bg-slate-100 hover:bg-slate-100/90 focus:bg-white border-2 border-slate-200/90 focus:border-primary placeholder:text-slate-400 focus-visible:ring-4 focus-visible:ring-primary/10 transition-all outline-none"
           />
           {searchQuery && (
             <button

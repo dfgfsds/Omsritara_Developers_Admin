@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import axiosInstance from "@/lib/axiosInstance";
 import {
   Property,
@@ -12,16 +12,25 @@ import {
 } from "./types";
 import { emptyFormData } from "./constants";
 import { toast } from "@/hooks/use-toast";
+import {
+  saveLocalDraft,
+  getLocalDraft,
+  removeLocalDraft,
+  formatDraftTime,
+  isFormDirtyOrHasContent,
+} from "@/utils/propertyDraftStorage";
 
 interface UsePropertyFormStateProps {
   initialAgentId?: string | null;
   initialAgentName?: string | null;
+  isOpen?: boolean;
   onSuccess?: (createdOrUpdatedProperty: any) => void;
 }
 
 export function usePropertyFormState({
   initialAgentId,
   initialAgentName,
+  isOpen,
   onSuccess,
 }: UsePropertyFormStateProps = {}) {
   const [editingProperty, setEditingProperty] = useState<Property | null>(null);
@@ -35,6 +44,13 @@ export function usePropertyFormState({
   const [formActiveTab, setFormActiveTab] = useState<string>("basic");
   const [loading, setLoading] = useState(false);
   const [imageUploading, setImageUploading] = useState(false);
+
+  const initialFormDataRef = useRef<PropertyFormData>(emptyFormData);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<
+    "saved" | "saving" | "local" | "idle"
+  >("idle");
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null);
+  const [isRestoredDraft, setIsRestoredDraft] = useState(false);
 
   // Property Types
   const [propertyTypes, setPropertyTypes] = useState<PropertyType[]>([]);
@@ -57,7 +73,7 @@ export function usePropertyFormState({
       const result = response?.data?.result || response?.data?.data || response?.data;
       const list = Array.isArray(result) ? result : [];
       setPropertyTypes(list);
-      if (list.length > 0 && !formData.type) {
+      if (list.length > 0 && !formData.type && isOpen !== false) {
         setFormData((prev) => ({ ...prev, type: list[0]._id }));
       }
     } catch (error) {
@@ -511,6 +527,18 @@ export function usePropertyFormState({
 
   // Populate existing property details for editing
   const populateForEdit = async (property: any) => {
+    if (!property) return;
+
+    if (property.localDraftData?.formData) {
+      setEditingProperty(property.localDraftData.editingProperty || null);
+      setFormData(property.localDraftData.formData);
+      initialFormDataRef.current = property.localDraftData.formData;
+      setIsRestoredDraft(true);
+      setAutoSaveStatus("saved");
+      setFormActiveTab(property.localDraftData.formActiveTab || "basic");
+      return;
+    }
+
     setEditingProperty(property);
     const toStr = (v: any) => (v !== undefined && v !== null ? String(v) : "");
 
@@ -685,7 +713,11 @@ export function usePropertyFormState({
         "",
     };
 
+    setEditingProperty(property);
     setFormData(editData);
+    initialFormDataRef.current = editData;
+    setIsRestoredDraft(false);
+    setAutoSaveStatus("idle");
     setFormActiveTab("basic");
     resetAmenitySelector();
 
@@ -695,7 +727,57 @@ export function usePropertyFormState({
     );
   };
 
-  const resetForm = () => {
+  const getDraftKey = (propId?: string | null) => {
+    if (propId) return propId;
+    return initialAgentId ? `agent_${initialAgentId}` : "new";
+  };
+
+  // Check if form has unsaved changes
+  const hasUnsavedChanges = useMemo(() => {
+    // If modal/dialog is explicitly closed, do NOT treat as unsaved changes
+    if (isOpen === false) return false;
+    return isFormDirtyOrHasContent(
+      formData,
+      editingProperty ? initialFormDataRef.current : null
+    );
+  }, [formData, editingProperty, isOpen]);
+
+  // Real-time Local Storage Auto-Save (800ms debounce)
+  useEffect(() => {
+    if (isOpen === false) return;
+    if (!hasUnsavedChanges) return;
+
+    const draftKey = getDraftKey(editingProperty?._id);
+    const timer = setTimeout(() => {
+      const saved = saveLocalDraft(draftKey, {
+        propertyId: editingProperty?._id || null,
+        editingProperty,
+        formData,
+        formActiveTab,
+        name: formData.name,
+      });
+
+      if (saved) {
+        setLastSavedTime(formatDraftTime(saved.timestamp));
+        if (!navigator.onLine) {
+          setAutoSaveStatus("local");
+        } else {
+          setAutoSaveStatus("saved");
+        }
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [formData, formActiveTab, editingProperty, hasUnsavedChanges, initialAgentId, isOpen]);
+
+  const handleDiscardDraft = () => {
+    const draftKey = getDraftKey(editingProperty?._id);
+    removeLocalDraft(draftKey);
+    removeLocalDraft("new");
+    if (initialAgentId) removeLocalDraft(`agent_${initialAgentId}`);
+    setIsRestoredDraft(false);
+    setLastSavedTime(null);
+    setAutoSaveStatus("idle");
     setEditingProperty(null);
     setFormData({
       ...emptyFormData,
@@ -705,46 +787,84 @@ export function usePropertyFormState({
       amenities_data: [],
       nearby_places: [],
     });
+    initialFormDataRef.current = emptyFormData;
     setFormActiveTab("basic");
     resetAmenitySelector();
   };
 
-  // Submit Handler (Supports both Create and Edit / Update)
+  const resetForm = () => {
+    const draftKey = getDraftKey();
+    const existingDraft = getLocalDraft(draftKey);
+
+    if (existingDraft && isFormDirtyOrHasContent(existingDraft.formData)) {
+      setEditingProperty(null);
+      setFormData(existingDraft.formData);
+      setFormActiveTab(existingDraft.formActiveTab || "basic");
+      setIsRestoredDraft(true);
+      setLastSavedTime(formatDraftTime(existingDraft.timestamp));
+      setAutoSaveStatus("saved");
+      resetAmenitySelector();
+      return;
+    }
+
+    setEditingProperty(null);
+    setFormData({
+      ...emptyFormData,
+      developer_name: initialAgentName ? `Agent: ${initialAgentName}` : "",
+      agent_id: initialAgentId || "",
+      image_url: [],
+      amenities_data: [],
+      nearby_places: [],
+    });
+    initialFormDataRef.current = emptyFormData;
+    setIsRestoredDraft(false);
+    setLastSavedTime(null);
+    setAutoSaveStatus("idle");
+    setFormActiveTab("basic");
+    resetAmenitySelector();
+  };
+
+  // Submit Handler (Supports both Create, Edit, and Save as Draft)
   const handleSubmit = async (
-    e: React.FormEvent,
+    e?: React.FormEvent,
     targetAgentId?: string,
-    targetAgentName?: string
+    targetAgentName?: string,
+    overrideStatus?: "available" | "draft"
   ) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
 
-    if (!formData.name.trim()) {
-      setFormActiveTab("basic");
-      toast({
-        title: "Required Field",
-        description: "Please enter the property name.",
-        variant: "destructive",
-      });
-      return null;
-    }
+    const isDraft = overrideStatus === "draft";
 
-    if (!formData.type) {
-      setFormActiveTab("basic");
-      toast({
-        title: "Required Field",
-        description: "Please select a property type.",
-        variant: "destructive",
-      });
-      return null;
-    }
+    if (!isDraft) {
+      if (!formData.name.trim()) {
+        setFormActiveTab("basic");
+        toast({
+          title: "Required Field",
+          description: "Please enter the property name.",
+          variant: "destructive",
+        });
+        return null;
+      }
 
-    if (!formData.city.trim()) {
-      setFormActiveTab("basic");
-      toast({
-        title: "Required Field",
-        description: "Please enter the city location.",
-        variant: "destructive",
-      });
-      return null;
+      if (!formData.type) {
+        setFormActiveTab("basic");
+        toast({
+          title: "Required Field",
+          description: "Please select a property type.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      if (!formData.city.trim()) {
+        setFormActiveTab("basic");
+        toast({
+          title: "Required Field",
+          description: "Please enter the city location.",
+          variant: "destructive",
+        });
+        return null;
+      }
     }
 
     setLoading(true);
@@ -882,25 +1002,29 @@ export function usePropertyFormState({
           ? formData.construction_status
           : undefined;
 
+      const resolvedDraftType =
+        cleanTypeId ||
+        (propertyTypes.length > 0 ? propertyTypes[0]._id : undefined);
+
       // Clean Location Object
       const cleanLocation: any = {
         country: formData.country?.trim() || "India",
       };
-      if (formData.address?.trim()) cleanLocation.address = formData.address.trim();
+      if (formData.address?.trim() || isDraft) cleanLocation.address = formData.address?.trim() || "Draft Address";
       if (formData.area?.trim()) cleanLocation.area = formData.area.trim();
-      if (formData.city?.trim()) cleanLocation.city = formData.city.trim();
-      if (formData.state?.trim()) cleanLocation.state = formData.state.trim();
+      if (formData.city?.trim() || isDraft) cleanLocation.city = formData.city?.trim() || "Draft City";
+      if (formData.state?.trim() || isDraft) cleanLocation.state = formData.state?.trim() || "Tamil Nadu";
       if (formData.pincode?.trim()) cleanLocation.pincode = formData.pincode.trim();
 
       // Common validated property payload matching backend Joi schema
       const propertyData: any = {
-        name: formData.name.trim(),
+        name: formData.name.trim() || (isDraft ? "Untitled Property Draft" : "Untitled Property"),
         listing_type: formData.listing_type || "sale",
         description: formData.description?.trim() || undefined,
         location: cleanLocation,
-        area_size: toNum(formData.area_size),
+        area_size: toNum(formData.area_size) || (isDraft ? 1 : undefined),
         area_unit: formData.area_unit || "sqft",
-        price: toNum(formData.price),
+        price: toNum(formData.price) !== undefined ? toNum(formData.price) : (isDraft ? 0 : undefined),
         price_per_sqft: toNum(formData.price_per_sqft),
         bedrooms: propertyTypeFields.bedrooms ? toNum(formData.bedrooms) : undefined,
         bathrooms: propertyTypeFields.bathrooms ? toNum(formData.bathrooms) : undefined,
@@ -935,25 +1059,44 @@ export function usePropertyFormState({
         owner_name: formData.owner_name?.trim() || undefined,
         developer_name: devName || undefined,
         project_name: formData.project_name?.trim() || undefined,
-        status: formData.status || "available",
+        status: isDraft
+          ? "draft"
+          : formData.status === "draft"
+          ? "available"
+          : formData.status || "available",
         isFeatured: Boolean(formData.isFeatured),
         isVerified: Boolean(formData.isVerified),
       };
 
-      if (isObjectId(cleanTypeId)) {
-        propertyData.type = cleanTypeId;
+      if (isObjectId(resolvedDraftType)) {
+        propertyData.type = resolvedDraftType;
       }
 
       let res;
       if (editingProperty?._id) {
         // UPDATE EXISTING PROPERTY:
         // Do NOT send created_by, agent_id, or _id as backend Joi validator strictly rejects unknown fields
-        res = await axiosInstance.put(`/property/${editingProperty._id}`, propertyData);
+        res = await axiosInstance.put(`/property/${editingProperty._id}`, propertyData, {
+          skipAuthRedirect: true,
+        } as any);
         const updated = res.data?.result || res.data?.data || res.data || propertyData;
 
+        const draftKey = getDraftKey(editingProperty._id);
+        removeLocalDraft(draftKey);
+        removeLocalDraft("new");
+        if (initialAgentId) removeLocalDraft(`agent_${initialAgentId}`);
+        setIsRestoredDraft(false);
+        setAutoSaveStatus("idle");
+
         toast({
-          title: "Property Listing Updated!",
-          description: `"${formData.name}" has been updated successfully.`,
+          title: isDraft
+            ? "Property Draft Saved!"
+            : editingProperty.status === "draft" || isRestoredDraft
+            ? "Draft Published Successfully!"
+            : "Property Listing Updated!",
+          description: `"${propertyData.name}" has been ${
+            isDraft ? "saved as a draft." : "published successfully to Available listings."
+          }`,
         });
 
         if (onSuccess) {
@@ -963,17 +1106,45 @@ export function usePropertyFormState({
       } else {
         // CREATE NEW PROPERTY:
         // Include created_by if valid ObjectId
-        const createPayload = {
+        const createPayload: any = {
           ...propertyData,
           ...(isObjectId(activeAgentId) ? { created_by: activeAgentId } : {}),
         };
 
-        res = await axiosInstance.post("/property", createPayload);
+        try {
+          res = await axiosInstance.post("/property", createPayload, {
+            skipAuthRedirect: true,
+          } as any);
+        } catch (postErr: any) {
+          const errMsg = String(postErr?.response?.data?.msg || postErr?.response?.data?.message || "");
+          if (errMsg.includes("created_by") && createPayload.created_by) {
+            delete createPayload.created_by;
+            res = await axiosInstance.post("/property", createPayload, {
+              skipAuthRedirect: true,
+            } as any);
+          } else {
+            throw postErr;
+          }
+        }
+
         const created = res.data?.result || res.data?.data || res.data || createPayload;
 
+        const draftKey = getDraftKey();
+        removeLocalDraft(draftKey);
+        removeLocalDraft("new");
+        if (initialAgentId) removeLocalDraft(`agent_${initialAgentId}`);
+        setIsRestoredDraft(false);
+        setAutoSaveStatus("idle");
+
         toast({
-          title: "Agent Property Published!",
-          description: `"${formData.name}" has been successfully added to the portfolio.`,
+          title: isDraft
+            ? "Property Draft Saved!"
+            : isRestoredDraft
+            ? "Draft Published Successfully!"
+            : "Agent Property Published!",
+          description: `"${propertyData.name}" has been ${
+            isDraft ? "saved as draft." : "successfully published to Available listings."
+          }`,
         });
 
         if (onSuccess) {
@@ -983,21 +1154,59 @@ export function usePropertyFormState({
       }
     } catch (err: any) {
       console.warn("Failed to save property via API, saving to local state:", err);
-      const fallbackObj = {
-        _id: editingProperty?._id || `prop_agent_${Date.now()}`,
+      const isDraft = overrideStatus === "draft";
+      const draftKey = getDraftKey(editingProperty?._id);
+
+      // Always save draft locally in localStorage so agent work is NEVER lost
+      saveLocalDraft(draftKey, {
+        propertyId: editingProperty?._id || null,
+        editingProperty,
+        formData: { ...formData, status: isDraft ? "draft" : formData.status || "available" },
+        formActiveTab,
         name: formData.name,
-        type: selectedPropertyType || "Apartment",
-        price: formData.price ? `₹ ${Number(formData.price).toLocaleString("en-IN")}` : "Price on Request",
-        location: [formData.address, formData.city].filter(Boolean).join(", ") || "Tamil Nadu",
-        status: formData.status || "available",
+      });
+      setIsRestoredDraft(true);
+      setAutoSaveStatus("saved");
+
+      const errStatus = err?.response?.status;
+      const errMsg = err?.response?.data?.msg || err?.response?.data?.message || err?.message || "";
+      const isAuthIssue = errStatus === 401 || errStatus === 403;
+
+      const fallbackObj = {
+        _id: editingProperty?._id || `local_draft_${draftKey}`,
+        name: formData.name || "Untitled Property Draft",
+        type: formData.type || (propertyTypes[0]?._id) || "Apartment",
+        price: formData.price ? Number(formData.price) : 0,
+        location: {
+          city: formData.city || "Draft City",
+          area: formData.area || "",
+          address: formData.address || "",
+        },
+        status: isDraft ? "draft" : formData.status || "available",
         agentId: targetAgentId || initialAgentId || "",
         agentName: targetAgentName || initialAgentName || "Agent",
-        image: formData.image_url[0] || "",
+        image_url: Array.isArray(formData.image_url) ? formData.image_url : [],
+        isLocalDraft: true,
+        localDraftId: draftKey,
+        localDraftData: {
+          draftId: draftKey,
+          propertyId: editingProperty?._id || null,
+          editingProperty,
+          formData: { ...formData, status: "draft" },
+          formActiveTab,
+          name: formData.name,
+          timestamp: Date.now(),
+          lastSavedAt: new Date().toISOString(),
+        },
       };
 
       toast({
-        title: editingProperty ? "Property Updated Locally" : "Property Saved Locally",
-        description: `"${formData.name}" has been saved.`,
+        title: isDraft ? "Draft Saved Successfully!" : "Saved Locally (Offline)",
+        description: isAuthIssue
+          ? `Draft is stored and ready in your Drafts tab.`
+          : isDraft
+          ? `Draft stored in your Drafts tab.`
+          : `Property saved: "${formData.name}".`,
       });
 
       if (onSuccess) {
@@ -1024,6 +1233,13 @@ export function usePropertyFormState({
     if (currentStepIdx > 0) {
       setFormActiveTab(stepIds[currentStepIdx - 1]);
     }
+  };
+
+  const handleSaveDraft = async (
+    targetAgentId?: string,
+    targetAgentName?: string
+  ) => {
+    return handleSubmit(undefined, targetAgentId, targetAgentName, "draft");
   };
 
   return {
@@ -1065,6 +1281,12 @@ export function usePropertyFormState({
     removeImage,
     resetForm,
     handleSubmit,
+    handleSaveDraft,
+    autoSaveStatus,
+    lastSavedTime,
+    isRestoredDraft,
+    handleDiscardDraft,
+    hasUnsavedChanges,
     stepIds,
     currentStepIdx,
     progressPercent,

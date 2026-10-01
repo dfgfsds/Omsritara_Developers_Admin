@@ -441,6 +441,19 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
                   </Button>
                 )}
 
+                {handleSaveDraft && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || imageUploading}
+                    className="h-9.5 rounded-xl text-xs font-bold border-amber-300 bg-amber-50/80 text-amber-900 hover:bg-amber-100 hover:border-amber-400 px-3.5 shadow-xs transition"
+                    onClick={handleSaveDraft}
+                  >
+                    <FileText className="mr-1.5 h-3.5 w-3.5 text-amber-600" /> Save as Draft
+                  </Button>
+                )}
+
                 {formActiveTab !== "settings" ? (
                   <Button
                     type="button"
@@ -466,6 +479,8 @@ export const PropertyFormDialog: React.FC<PropertyFormDialogProps> = ({
                     <>
                       <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Saving...
                     </>
+                  ) : editingProperty?.status === "draft" || formData.status === "draft" || isRestoredDraft ? (
+                    "Publish Property"
                   ) : editingProperty ? (
                     "Save Changes"
                   ) : (
