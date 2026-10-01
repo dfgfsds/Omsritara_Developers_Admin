@@ -36,21 +36,43 @@ axiosInstance.interceptors.response.use(
         return response;
     },
     (error) => {
+        const url = String(error.config?.url || "").toLowerCase();
+        const errData = error.response?.data;
+        const errMsg = String(
+            errData?.msg || errData?.message || errData?.error || ""
+        ).toLowerCase();
+
+        // Check if token is genuinely expired or invalid
+        const isTokenExpiredOrInvalid =
+            errMsg.includes("jwt expired") ||
+            errMsg.includes("token expired") ||
+            errMsg.includes("jwt malformed") ||
+            errMsg.includes("invalid token") ||
+            errMsg.includes("no token");
+
+        // Endpoints or actions that should never trigger hard logout
         const isSuppEndpoint =
             Boolean((error.config as any)?.skipAuthRedirect) ||
-            String(error.config?.url || "").includes("/user");
+            url.includes("/user") ||
+            url.includes("/property") ||
+            url.includes("/enquiry") ||
+            url.includes("/upload");
 
+        // Only redirect to login if not suppressed, and either no token exists or token is explicitly expired/invalid
         if (error.response && error.response.status === 401 && !isSuppEndpoint) {
-            localStorage.removeItem("token");
-            localStorage.removeItem("accessToken");
-            localStorage.removeItem("refreshToken");
-            localStorage.removeItem("user");
-            localStorage.removeItem("ost_user_role");
-            localStorage.removeItem("roleType");
-            localStorage.removeItem("ost_agent_id");
-            localStorage.removeItem("ost_simulated_role");
-            if (window.location.pathname !== "/login") {
-                window.location.href = "/login";
+            const hasToken = Boolean(localStorage.getItem("token"));
+            if (!hasToken || isTokenExpiredOrInvalid) {
+                localStorage.removeItem("token");
+                localStorage.removeItem("accessToken");
+                localStorage.removeItem("refreshToken");
+                localStorage.removeItem("user");
+                localStorage.removeItem("ost_user_role");
+                localStorage.removeItem("roleType");
+                localStorage.removeItem("ost_agent_id");
+                localStorage.removeItem("ost_simulated_role");
+                if (window.location.pathname !== "/login") {
+                    window.location.href = "/login";
+                }
             }
         }
         return Promise.reject(error);

@@ -315,7 +315,7 @@ export function DashboardHeader() {
     filteredEnquiries.length;
 
   return (
-    <header className="sticky top-0 z-40 h-16 border-b border-slate-200/80 bg-white/80 backdrop-blur-xl shadow-xs flex items-center justify-between px-4 sm:px-6 transition-all">
+    <header className="sticky top-0 z-40 h-16 border-b border-slate-200 bg-white shadow-xs flex items-center justify-between px-4 sm:px-6 transition-all">
       {/* Left: Sidebar trigger and Spotlight Search */}
       <div className="flex items-center gap-3 sm:gap-4 flex-1 max-w-2xl">
         <SidebarTrigger className="h-9 w-9 rounded-xl hover:bg-slate-100 text-slate-700 hover:text-slate-950 border border-transparent hover:border-slate-200/80 transition-all shrink-0" />
@@ -323,7 +323,7 @@ export function DashboardHeader() {
         {/* Global Search Container */}
         <div ref={containerRef} className="relative w-full max-w-md">
           <form onSubmit={handleFormSubmit} className="relative flex items-center">
-            <Search className="absolute left-3.5 h-4 w-4 text-slate-400 pointer-events-none transition-colors" />
+            <Search className="absolute left-3.5 h-4 w-4 text-slate-500 pointer-events-none transition-colors" />
 
             <input
               ref={inputRef}
@@ -338,7 +338,7 @@ export function DashboardHeader() {
                 setIsOpen(true);
                 fetchSearchData();
               }}
-              className="h-10 w-full rounded-full border border-slate-200/90 bg-slate-100/70 pl-10 pr-20 text-xs font-semibold text-slate-900 placeholder:text-slate-400 shadow-2xs transition-all hover:bg-white hover:border-slate-300 focus:bg-white focus:border-primary/60 focus:outline-none focus:ring-4 focus:ring-primary/10"
+              className="h-10 w-full rounded-full border-2 border-slate-200/90 bg-slate-100 pl-10 pr-20 text-xs font-bold text-slate-950 placeholder:text-slate-400 shadow-2xs transition-all hover:bg-white hover:border-slate-300 focus:bg-white focus:border-primary focus:outline-none focus:ring-4 focus:ring-primary/10"
             />
 
             {/* Right indicators: Clear button & Ctrl+K badge */}
@@ -368,11 +368,18 @@ export function DashboardHeader() {
 
           {/* Spotlight Floating Dropdown */}
           {isOpen && (
-            <div className="absolute left-0 top-full mt-2 w-full min-w-[320px] sm:min-w-[480px] max-w-lg rounded-3xl border border-slate-200/90 bg-white/98 backdrop-blur-xl shadow-2xl p-2.5 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150">
-              {/* Header / Summary */}
-              <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 mb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                <span>
-                  {query.trim()
+            <>
+              {/* Dimmed backdrop to prevent background elements from showing through */}
+              <div
+                className="fixed inset-0 z-40 bg-slate-950/25"
+                onClick={() => setIsOpen(false)}
+              />
+
+              <div className="absolute left-0 top-full mt-2 w-full min-w-[320px] sm:min-w-[480px] max-w-lg rounded-3xl border-2 border-slate-200 bg-white shadow-2xl p-2.5 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-150 ring-1 ring-slate-950/5">
+                {/* Header / Summary */}
+                <div className="flex items-center justify-between px-3 py-1.5 border-b border-slate-100 mb-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span>
+                    {query.trim()
                     ? `Results (${totalResults})`
                     : "Quick Shortcuts"}
                 </span>
@@ -575,6 +582,7 @@ export function DashboardHeader() {
                 <span>ESC to close</span>
               </div>
             </div>
+          </>
           )}
         </div>
       </div>

@@ -25,6 +25,7 @@ export const AgentPropertyFormDialog: React.FC<AgentPropertyFormDialogProps> = (
   }, [targetAgent, open]);
 
   const formState = usePropertyFormState({
+    isOpen: open,
     initialAgentId: selectedAgent?._id,
     initialAgentName: selectedAgent?.name,
     onSuccess: (created) => {

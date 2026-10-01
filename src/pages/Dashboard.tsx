@@ -180,26 +180,22 @@ const Dashboard = () => {
           axiosInstance.get("/enquiry"),
         ]);
 
-        const rawProps =
-          propRes.status === "fulfilled"
-            ? propRes.value?.data?.result ||
-              propRes.value?.data?.data ||
-              propRes.value?.data ||
-              []
-            : [];
+        let rawProps: any[] = [];
+        if (propRes.status === "fulfilled") {
+          const d = (propRes as PromiseFulfilledResult<any>).value?.data;
+          rawProps = Array.isArray(d?.result) ? d.result : Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+        }
         const allProps = Array.isArray(rawProps) ? rawProps : [];
         const myProps = allProps.filter((p: any) => {
           const ownerId = p.created_by?._id || p.created_by;
           return String(ownerId) === String(currentAgent._id);
         });
 
-        const rawEnqs =
-          enqRes.status === "fulfilled"
-            ? enqRes.value?.data?.result ||
-              enqRes.value?.data?.data ||
-              enqRes.value?.data ||
-              []
-            : [];
+        let rawEnqs: any[] = [];
+        if (enqRes.status === "fulfilled") {
+          const d = (enqRes as PromiseFulfilledResult<any>).value?.data;
+          rawEnqs = Array.isArray(d?.result) ? d.result : Array.isArray(d?.data) ? d.data : Array.isArray(d) ? d : [];
+        }
         const allEnqs = Array.isArray(rawEnqs) ? rawEnqs : [];
         const myEnqs = allEnqs.filter((e: any) => {
           const propObj = Array.isArray(e.property) ? e.property[0] : e.property;

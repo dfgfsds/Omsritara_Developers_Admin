@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   MessageCircle,
   Search,
@@ -61,7 +62,23 @@ import { toast } from "@/hooks/use-toast";
 import axiosInstance from "@/lib/axiosInstance";
 import { useAuth } from "@/context/AuthContext";
 
+// Helper to ensure safe string rendering in React JSX and prevent "Objects are not valid as a React child" crashes
+const getSafeString = (val: any, fallback = ""): string => {
+  if (typeof val === "string") return val;
+  if (typeof val === "number" || typeof val === "boolean") return String(val);
+  if (val && typeof val === "object") {
+    if (typeof val.name === "string") return val.name;
+    if (typeof val.title === "string") return val.title;
+    if (typeof val.city === "string") return val.city;
+    if (typeof val.address === "string") return val.address;
+    if (typeof val.email === "string") return val.email;
+    if (typeof val.mobile === "string" || typeof val.mobile === "number") return String(val.mobile);
+  }
+  return fallback;
+};
+
 export default function AgentEnquiries() {
+  const [searchParams] = useSearchParams();
   const { userData, currentAgent } = useAuth();
   const currentAgentId =
     userData?._id ||
@@ -71,7 +88,14 @@ export default function AgentEnquiries() {
   const [enquiries, setEnquiries] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(searchParams.get("status") || "all");
+
+  useEffect(() => {
+    const s = searchParams.get("status");
+    if (s) {
+      setStatusFilter(s);
+    }
+  }, [searchParams]);
 
   // Dialog States
   const [viewingEnquiry, setViewingEnquiry] = useState<any | null>(null);
@@ -79,12 +103,16 @@ export default function AgentEnquiries() {
   const [deletingEnquiry, setDeletingEnquiry] = useState<any | null>(null);
 
   // Form State for Editing
+  const [editName, setEditName] = useState<string>("");
+  const [editMobile, setEditMobile] = useState<string>("");
+  const [editEmail, setEditEmail] = useState<string>("");
   const [editStatus, setEditStatus] = useState<string>("new");
   const [editPriority, setEditPriority] = useState<string>("medium");
   const [editNotes, setEditNotes] = useState<string>("");
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
+  const [isUpdatingPriority, setIsUpdatingPriority] = useState(false);
 
   const fetchEnquiries = async () => {
     setIsLoading(true);
@@ -165,12 +193,51 @@ export default function AgentEnquiries() {
     }
   };
 
+  // Quick Priority Switcher Handler
+  const handleUpdatePriority = async (id: string, newPriority: string) => {
+    setIsUpdatingPriority(true);
+    try {
+      await axiosInstance.put(`/enquiry/${id}`, {
+        priority: newPriority.toLowerCase(),
+      });
+      toast({
+        title: "Lead Priority Updated",
+        description: `Lead priority marked as "${newPriority.toUpperCase()}".`,
+      });
+
+      // Update state locally
+      setEnquiries((prev) =>
+        prev.map((e) =>
+          e._id === id ? { ...e, priority: newPriority.toLowerCase() } : e
+        )
+      );
+      if (viewingEnquiry && viewingEnquiry._id === id) {
+        setViewingEnquiry((prev: any) => ({
+          ...prev,
+          priority: newPriority.toLowerCase(),
+        }));
+      }
+    } catch (err: any) {
+      toast({
+        title: "Priority Update Failed",
+        description:
+          err.response?.data?.msg || err.message || "Could not update priority.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingPriority(false);
+    }
+  };
+
   // Open Edit Modal
   const handleOpenEdit = (enq: any) => {
     setEditingEnquiry(enq);
-    setEditStatus(enq.status || "new");
-    setEditPriority(enq.priority || "medium");
-    setEditNotes(enq.description || enq.notes || "");
+    setEditName(getSafeString(enq.name, ""));
+    setEditMobile(getSafeString(enq.mobile || enq.phone, ""));
+    setEditEmail(getSafeString(enq.email, ""));
+    setEditStatus(getSafeString(enq.status, "new"));
+    setEditPriority(getSafeString(enq.priority, "medium"));
+    setEditNotes(getSafeString(enq.description || enq.notes || enq.message, ""));
   };
 
   // Save Edit Submission
@@ -179,17 +246,26 @@ export default function AgentEnquiries() {
     setIsSubmittingEdit(true);
 
     try {
+      const cleanName = getSafeString(editName).trim();
+      const cleanEmail = getSafeString(editEmail).trim().toLowerCase();
+      const digitsOnly = getSafeString(editMobile).replace(/\D/g, "");
+      const cleanMobile = digitsOnly.length >= 10 ? digitsOnly.slice(-10) : digitsOnly;
+      const cleanNotes = getSafeString(editNotes).trim();
+
       const payload: any = {
-        status: editStatus,
-        priority: editPriority,
-        description: editNotes.trim(),
+        name: cleanName || "Client Lead",
+        status: editStatus.toLowerCase(),
+        priority: editPriority.toLowerCase(),
       };
+      if (cleanEmail && cleanEmail !== "-") payload.email = cleanEmail;
+      if (cleanMobile && cleanMobile.length === 10) payload.mobile = cleanMobile;
+      if (cleanNotes) payload.description = cleanNotes;
 
       await axiosInstance.put(`/enquiry/${editingEnquiry._id}`, payload);
 
       toast({
         title: "Lead Details Updated",
-        description: `Enquiry for ${editingEnquiry.name || "Client"} has been saved.`,
+        description: `Enquiry for ${cleanName || "Client"} has been saved.`,
       });
 
       setEnquiries((prev) =>
@@ -197,9 +273,12 @@ export default function AgentEnquiries() {
           item._id === editingEnquiry._id
             ? {
                 ...item,
+                name: cleanName || item.name,
+                email: cleanEmail || item.email,
+                mobile: cleanMobile || item.mobile,
                 status: editStatus,
                 priority: editPriority,
-                description: editNotes.trim(),
+                description: cleanNotes,
               }
             : item
         )
@@ -208,18 +287,26 @@ export default function AgentEnquiries() {
       if (viewingEnquiry && viewingEnquiry._id === editingEnquiry._id) {
         setViewingEnquiry((prev: any) => ({
           ...prev,
+          name: cleanName || prev.name,
+          email: cleanEmail || prev.email,
+          mobile: cleanMobile || prev.mobile,
           status: editStatus,
           priority: editPriority,
-          description: editNotes.trim(),
+          description: cleanNotes,
         }));
       }
 
       setEditingEnquiry(null);
     } catch (err: any) {
+      console.error("Error updating enquiry:", err);
+      const serverMsg =
+        getSafeString(err.response?.data?.msg) ||
+        getSafeString(err.response?.data?.message) ||
+        getSafeString(err.message) ||
+        "Could not save enquiry.";
       toast({
         title: "Update Failed",
-        description:
-          err.response?.data?.msg || err.message || "Could not save enquiry.",
+        description: serverMsg,
         variant: "destructive",
       });
     } finally {
@@ -263,20 +350,24 @@ export default function AgentEnquiries() {
   const filteredEnquiries = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
     return enquiries.filter((e) => {
+      const nameStr = getSafeString(e.name).toLowerCase();
+      const emailStr = getSafeString(e.email).toLowerCase();
+      const mobileStr = getSafeString(e.mobile || e.phone);
+      const propStr = getSafeString(
+        e.property?.name || e.property_id?.name || e.propertyName
+      ).toLowerCase();
+
       const matchesSearch =
         !q ||
-        (e.name && e.name.toLowerCase().includes(q)) ||
-        (e.email && e.email.toLowerCase().includes(q)) ||
-        (e.mobile && String(e.mobile).includes(q)) ||
-        (e.phone && String(e.phone).includes(q)) ||
-        ((e.property?.name || e.property_id?.name || e.propertyName) &&
-          (e.property?.name || e.property_id?.name || e.propertyName)
-            .toLowerCase()
-            .includes(q));
+        nameStr.includes(q) ||
+        emailStr.includes(q) ||
+        mobileStr.includes(q) ||
+        propStr.includes(q);
 
+      const statusStr = getSafeString(e.status).toLowerCase();
       const matchesStatus =
         statusFilter === "all" ||
-        (e.status && e.status.toLowerCase() === statusFilter.toLowerCase());
+        statusStr === statusFilter.toLowerCase();
 
       return matchesSearch && matchesStatus;
     });
@@ -286,81 +377,80 @@ export default function AgentEnquiries() {
   const counts = useMemo(() => {
     return {
       all: enquiries.length,
-      new: enquiries.filter((e) => !e.status || e.status.toLowerCase() === "new")
-        .length,
-      contacted: enquiries.filter(
-        (e) =>
-          e.status &&
-          (e.status.toLowerCase() === "contacted" ||
-            e.status.toLowerCase() === "in_progress")
+      new: enquiries.filter(
+        (e) => !e.status || getSafeString(e.status).toLowerCase() === "new"
       ).length,
+      contacted: enquiries.filter((e) => {
+        const s = getSafeString(e.status).toLowerCase();
+        return s === "contacted" || s === "in_progress";
+      }).length,
       closed: enquiries.filter(
-        (e) => e.status && e.status.toLowerCase() === "closed"
+        (e) => getSafeString(e.status).toLowerCase() === "closed"
       ).length,
     };
   }, [enquiries]);
 
   // Color Helper for Status Badges
-  const getStatusBadge = (status: string) => {
-    const s = (status || "new").toLowerCase();
+  const getStatusBadge = (status: any) => {
+    const s = getSafeString(status, "new").toLowerCase();
     switch (s) {
       case "new":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200/80 shadow-2xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200/80 hover:bg-sky-100 hover:text-sky-950 transition-colors shadow-2xs">
             <span className="h-1.5 w-1.5 rounded-full bg-sky-500 animate-pulse" />
             New Lead
           </span>
         );
       case "contacted":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/80 shadow-2xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200/80 hover:bg-amber-100 hover:text-amber-950 transition-colors shadow-2xs">
             <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
             Contacted
           </span>
         );
       case "in_progress":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 shadow-2xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/80 hover:bg-indigo-100 hover:text-indigo-950 transition-colors shadow-2xs">
             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
             In Progress
           </span>
         );
       case "closed":
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 shadow-2xs">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/80 hover:bg-emerald-100 hover:text-emerald-950 transition-colors shadow-2xs">
             <CheckCircle2 className="h-3 w-3 text-emerald-600" />
             Closed
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 shadow-2xs">
-            {status}
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 hover:text-slate-950 transition-colors shadow-2xs">
+            {getSafeString(status)}
           </span>
         );
     }
   };
 
   // Color Helper for Priority Badges
-  const getPriorityBadge = (priority: string) => {
-    const p = (priority || "medium").toLowerCase();
+  const getPriorityBadge = (priority: any) => {
+    const p = getSafeString(priority, "medium").toLowerCase();
     switch (p) {
       case "high":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-rose-50 text-rose-700 border border-rose-200/80">
-            <Flame className="h-3 w-3 text-rose-500" />
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-black bg-rose-50 text-rose-700 border border-rose-200/90 hover:bg-rose-100 hover:text-rose-950 transition-colors shadow-2xs">
+            <Flame className="h-3.5 w-3.5 text-rose-600" />
             High
           </span>
         );
       case "low":
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-200">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-black bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 hover:text-slate-950 transition-colors shadow-2xs">
             Low
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-extrabold bg-amber-50 text-amber-700 border border-amber-200/80">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-[11px] font-black bg-amber-50 text-amber-800 border border-amber-200/90 hover:bg-amber-100 hover:text-amber-950 transition-colors shadow-2xs">
             Medium
           </span>
         );
@@ -403,7 +493,14 @@ export default function AgentEnquiries() {
         {/* 4 Soft Stat Metric Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
           {/* Total Leads */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-sky-50/30 to-blue-50/50 p-4 sm:p-5 border border-sky-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+          <div
+            onClick={() => setStatusFilter("all")}
+            className={`relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-sky-50/30 to-blue-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+              statusFilter === "all"
+                ? "border-sky-500 ring-2 ring-sky-500/20 shadow-md"
+                : "border-sky-100/80 shadow-xs hover:shadow-md"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
                 Total Leads
@@ -423,7 +520,14 @@ export default function AgentEnquiries() {
           </div>
 
           {/* New Leads */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/50 p-4 sm:p-5 border border-emerald-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+          <div
+            onClick={() => setStatusFilter("new")}
+            className={`relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+              statusFilter === "new"
+                ? "border-emerald-500 ring-2 ring-emerald-500/20 shadow-md"
+                : "border-emerald-100/80 shadow-xs hover:shadow-md"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
                 New Leads
@@ -443,7 +547,14 @@ export default function AgentEnquiries() {
           </div>
 
           {/* In Follow-up */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-amber-50/30 to-orange-50/50 p-4 sm:p-5 border border-amber-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+          <div
+            onClick={() => setStatusFilter("contacted")}
+            className={`relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-amber-50/30 to-orange-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+              statusFilter === "contacted"
+                ? "border-amber-500 ring-2 ring-amber-500/20 shadow-md"
+                : "border-amber-100/80 shadow-xs hover:shadow-md"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
                 In Follow-up
@@ -463,7 +574,14 @@ export default function AgentEnquiries() {
           </div>
 
           {/* Closed Deals */}
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/50 p-4 sm:p-5 border border-purple-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+          <div
+            onClick={() => setStatusFilter("closed")}
+            className={`relative overflow-hidden rounded-3xl bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+              statusFilter === "closed"
+                ? "border-purple-500 ring-2 ring-purple-500/20 shadow-md"
+                : "border-purple-100/80 shadow-xs hover:shadow-md"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">
                 Closed Deals
@@ -487,21 +605,26 @@ export default function AgentEnquiries() {
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-3xl bg-white p-4 border border-slate-200/80 shadow-xs">
           {/* Search Box */}
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <Input
-              placeholder="Search leads by customer name, phone, email, property..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-9 h-10 rounded-2xl border-slate-200 text-xs font-medium focus-visible:ring-primary/20"
-            />
-            {searchTerm && (
-              <button
-                onClick={() => setSearchTerm("")}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+            <div className="relative flex items-center">
+              <Search className="absolute left-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search leads by customer name, phone, email, property..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full h-11 pl-10 pr-10 rounded-2xl bg-slate-100 hover:bg-slate-100/90 focus:bg-white border-2 border-slate-200/90 focus:border-primary text-slate-950 font-bold text-xs sm:text-sm placeholder:text-slate-400 placeholder:font-normal focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 h-6 w-6 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors"
+                  title="Clear search"
+                >
+                  <X className="h-3.5 w-3.5 stroke-[2.5]" />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Soft Filter Tabs */}
@@ -594,11 +717,16 @@ export default function AgentEnquiries() {
               </TableHeader>
               <TableBody>
                 {filteredEnquiries.map((enq) => {
-                  const propTitle =
+                  const propTitle = getSafeString(
                     enq.property?.name ||
                     enq.property_id?.name ||
-                    enq.propertyName ||
-                    "General Enquiry";
+                    enq.propertyName,
+                    "General Enquiry"
+                  );
+                  const clientName = getSafeString(enq.name, "Customer");
+                  const clientMobile = getSafeString(enq.mobile || enq.phone, "N/A");
+                  const clientEmail = getSafeString(enq.email);
+                  const clientDesc = getSafeString(enq.description || enq.notes || enq.message);
 
                   return (
                     <TableRow
@@ -609,15 +737,15 @@ export default function AgentEnquiries() {
                       <TableCell className="py-3 pl-6">
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-2xl bg-gradient-to-br from-primary/10 to-amber-100/50 text-primary flex items-center justify-center font-black text-xs shrink-0 shadow-2xs border border-primary/10">
-                            {enq.name ? enq.name.charAt(0).toUpperCase() : "U"}
+                            {clientName ? clientName.charAt(0).toUpperCase() : "U"}
                           </div>
                           <div>
                             <span className="font-bold text-xs text-slate-900 block group-hover:text-primary transition-colors">
-                              {enq.name || "Customer"}
+                              {clientName}
                             </span>
-                            {enq.description && (
+                            {clientDesc && (
                               <p className="text-[11px] text-slate-400 truncate max-w-[170px] mt-0.5">
-                                "{enq.description}"
+                                "{clientDesc}"
                               </p>
                             )}
                           </div>
@@ -630,20 +758,20 @@ export default function AgentEnquiries() {
                           <div className="flex items-center gap-1.5">
                             <Phone className="h-3 w-3 text-slate-400 shrink-0" />
                             <a
-                              href={`tel:${enq.mobile || enq.phone}`}
+                              href={`tel:${clientMobile}`}
                               className="hover:text-primary hover:underline"
                             >
-                              {enq.mobile || enq.phone || "N/A"}
+                              {clientMobile}
                             </a>
                           </div>
-                          {enq.email && (
+                          {clientEmail && (
                             <div className="flex items-center gap-1.5 text-slate-400 text-[11px]">
                               <Mail className="h-3 w-3 text-slate-400 shrink-0" />
                               <a
-                                href={`mailto:${enq.email}`}
+                                href={`mailto:${clientEmail}`}
                                 className="truncate max-w-[150px] hover:text-primary hover:underline"
                               >
-                                {enq.email}
+                                {clientEmail}
                               </a>
                             </div>
                           )}
@@ -658,14 +786,72 @@ export default function AgentEnquiries() {
                         </div>
                       </TableCell>
 
-                      {/* Status */}
+                      {/* Status (Interactive cycle on click) */}
                       <TableCell className="py-3">
-                        {getStatusBadge(enq.status)}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = getSafeString(
+                                  enq.status,
+                                  "new"
+                                ).toLowerCase();
+                                const next =
+                                  cur === "new"
+                                    ? "contacted"
+                                    : cur === "contacted"
+                                    ? "in_progress"
+                                    : cur === "in_progress"
+                                    ? "closed"
+                                    : "new";
+                                handleUpdateStatus(enq._id, next);
+                              }}
+                              disabled={isUpdatingStatus}
+                              className="transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                            >
+                              {getStatusBadge(enq.status)}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="text-xs font-bold">
+                              Click to cycle status (New → Contacted → In Progress → Closed)
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
 
-                      {/* Priority */}
+                      {/* Priority (Interactive cycle on click) */}
                       <TableCell className="py-3">
-                        {getPriorityBadge(enq.priority)}
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const cur = getSafeString(
+                                  enq.priority,
+                                  "medium"
+                                ).toLowerCase();
+                                const next =
+                                  cur === "low"
+                                    ? "medium"
+                                    : cur === "medium"
+                                    ? "high"
+                                    : "low";
+                                handleUpdatePriority(enq._id, next);
+                              }}
+                              disabled={isUpdatingPriority}
+                              className="transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                            >
+                              {getPriorityBadge(enq.priority)}
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            <p className="text-xs font-bold">
+                              Click to cycle priority (Low → Medium → High)
+                            </p>
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
 
                       {/* Date */}
@@ -679,59 +865,18 @@ export default function AgentEnquiries() {
                           : "Recently"}
                       </TableCell>
 
-                      {/* Action Buttons: View, Edit, Delete */}
+                      {/* Action Button: View Lead Only */}
                       <TableCell className="py-3 pr-6 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {/* 1. View Button */}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setViewingEnquiry(enq)}
-                                className="h-8.5 w-8.5 p-0 rounded-xl bg-slate-100/70 hover:bg-sky-50 text-slate-600 hover:text-sky-700 transition-colors"
-                              >
-                                <Eye className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p className="text-xs font-bold">View Full Details</p>
-                            </TooltipContent>
-                          </Tooltip>
-
-                          {/* 2. Edit Button */}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenEdit(enq)}
-                                className="h-8.5 w-8.5 p-0 rounded-xl bg-slate-100/70 hover:bg-amber-50 text-slate-600 hover:text-amber-700 transition-colors"
-                              >
-                                <Edit2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p className="text-xs font-bold">Edit Status & Remarks</p>
-                            </TooltipContent>
-                          </Tooltip>
-
-                          {/* 3. Delete Button */}
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setDeletingEnquiry(enq)}
-                                className="h-8.5 w-8.5 p-0 rounded-xl bg-slate-100/70 hover:bg-rose-50 text-slate-600 hover:text-rose-700 transition-colors"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TooltipTrigger>
-                            <TooltipContent side="top">
-                              <p className="text-xs font-bold">Delete Lead</p>
-                            </TooltipContent>
-                          </Tooltip>
+                        <div className="flex items-center justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setViewingEnquiry(enq)}
+                            className="h-8.5 px-3 rounded-xl bg-sky-50/80 hover:bg-sky-100 text-sky-800 hover:text-sky-950 border border-sky-200/90 font-bold text-xs shadow-2xs transition-all flex items-center gap-1.5"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-sky-600" />
+                            <span>View Details</span>
+                          </Button>
                         </div>
                       </TableCell>
                     </TableRow>
@@ -750,17 +895,79 @@ export default function AgentEnquiries() {
           onOpenChange={(val) => !val && setViewingEnquiry(null)}
         >
           {viewingEnquiry && (
-            <DialogContent className="max-w-lg rounded-3xl p-6 sm:p-7 bg-white border border-slate-100 shadow-xl">
+            <DialogContent className="max-w-lg rounded-3xl p-6 sm:p-7 bg-white border border-slate-200 shadow-xl">
               <DialogHeader>
-                <div className="flex items-center justify-between">
-                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-sky-50 text-sky-800 text-xs font-bold border border-sky-100">
-                    <Eye className="h-3.5 w-3.5 text-sky-600" />
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-800 text-xs font-bold border border-slate-200">
+                    <Eye className="h-3.5 w-3.5 text-slate-600" />
                     Enquiry Details
                   </div>
-                  {getStatusBadge(viewingEnquiry.status)}
+                  <div className="flex items-center gap-1.5">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = getSafeString(
+                              viewingEnquiry.status,
+                              "new"
+                            ).toLowerCase();
+                            const next =
+                              cur === "new"
+                                ? "contacted"
+                                : cur === "contacted"
+                                ? "in_progress"
+                                : cur === "in_progress"
+                                ? "closed"
+                                : "new";
+                            handleUpdateStatus(viewingEnquiry._id, next);
+                          }}
+                          disabled={isUpdatingStatus}
+                          className="transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                        >
+                          {getStatusBadge(viewingEnquiry.status)}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p className="text-xs font-bold">
+                          Click to cycle status
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const cur = getSafeString(
+                              viewingEnquiry.priority,
+                              "medium"
+                            ).toLowerCase();
+                            const next =
+                              cur === "low"
+                                ? "medium"
+                                : cur === "medium"
+                                ? "high"
+                                : "low";
+                            handleUpdatePriority(viewingEnquiry._id, next);
+                          }}
+                          disabled={isUpdatingPriority}
+                          className="transition-transform hover:scale-105 active:scale-95 cursor-pointer focus:outline-none"
+                        >
+                          {getPriorityBadge(viewingEnquiry.priority)}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <p className="text-xs font-bold">
+                          Click to cycle priority
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
                 <DialogTitle className="font-heading font-black text-xl text-slate-950 mt-2">
-                  {viewingEnquiry.name || "Customer Lead"}
+                  {getSafeString(viewingEnquiry.name, "Customer Lead")}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 font-medium">
                   Received on{" "}
@@ -773,44 +980,43 @@ export default function AgentEnquiries() {
                 </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4 mt-2">
-                {/* Contact Card with Action Buttons */}
-                <div className="p-4 rounded-2xl bg-gradient-to-br from-slate-50 to-slate-100/50 border border-slate-200/80 space-y-3">
+              <div className="space-y-3.5 mt-2">
+                {/* Contact Card with Action Buttons - Clean Even Style */}
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 space-y-3">
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         Phone Number
                       </span>
-                      <p className="font-extrabold text-slate-900 mt-0.5">
-                        {viewingEnquiry.mobile || viewingEnquiry.phone || "N/A"}
+                      <p className="font-extrabold text-slate-900 mt-0.5 text-xs sm:text-sm">
+                        {getSafeString(viewingEnquiry.mobile || viewingEnquiry.phone, "N/A")}
                       </p>
                     </div>
                     <div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                         Email Address
                       </span>
-                      <p className="font-extrabold text-slate-900 truncate mt-0.5">
-                        {viewingEnquiry.email || "N/A"}
+                      <p className="font-extrabold text-slate-900 truncate mt-0.5 text-xs sm:text-sm">
+                        {getSafeString(viewingEnquiry.email, "N/A")}
                       </p>
                     </div>
                   </div>
 
-                  {/* Direct Contact Buttons */}
-                  <div className="flex items-center gap-2 pt-1 border-t border-slate-200/60">
+                  {/* Direct Contact Buttons - Unified Even Design */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-200/70">
                     {(viewingEnquiry.mobile || viewingEnquiry.phone) && (
                       <>
                         <a
                           href={`tel:${viewingEnquiry.mobile || viewingEnquiry.phone}`}
                           className="flex-1"
                         >
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-200 font-bold text-xs h-9"
+                          <button
+                            type="button"
+                            className="w-full h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-800 hover:text-slate-950 border border-slate-200 font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                           >
-                            <Phone className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
-                            Call Now
-                          </Button>
+                            <Phone className="h-3.5 w-3.5 text-slate-600" />
+                            <span>Call Now</span>
+                          </button>
                         </a>
                         <a
                           href={`https://wa.me/91${String(
@@ -820,14 +1026,13 @@ export default function AgentEnquiries() {
                           rel="noreferrer"
                           className="flex-1"
                         >
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="w-full rounded-xl bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-200 font-bold text-xs h-9"
+                          <button
+                            type="button"
+                            className="w-full h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-800 hover:text-slate-950 border border-slate-200 font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                           >
-                            <MessageSquare className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
-                            WhatsApp
-                          </Button>
+                            <MessageSquare className="h-3.5 w-3.5 text-slate-600" />
+                            <span>WhatsApp</span>
+                          </button>
                         </a>
                       </>
                     )}
@@ -836,77 +1041,140 @@ export default function AgentEnquiries() {
                         href={`mailto:${viewingEnquiry.email}`}
                         className="flex-1"
                       >
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full rounded-xl bg-white hover:bg-sky-50 text-sky-800 border-sky-200 font-bold text-xs h-9"
+                        <button
+                          type="button"
+                          className="w-full h-9 rounded-xl bg-white hover:bg-slate-100 text-slate-800 hover:text-slate-950 border border-slate-200 font-bold text-xs shadow-2xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                         >
-                          <Mail className="h-3.5 w-3.5 mr-1.5 text-sky-600" />
-                          Email
-                        </Button>
+                          <Mail className="h-3.5 w-3.5 text-slate-600" />
+                          <span>Email</span>
+                        </button>
                       </a>
                     )}
                   </div>
                 </div>
 
-                {/* Target Property Card */}
+                {/* Target Property Card - Clean Even Style */}
                 {(viewingEnquiry.property ||
                   viewingEnquiry.property_id ||
                   viewingEnquiry.propertyName) && (
-                  <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200/70 text-xs">
-                    <span className="text-[10px] font-bold text-amber-800 uppercase tracking-wider block">
+                  <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 text-xs">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
                       Target Property
                     </span>
-                    <p className="font-black text-amber-950 text-sm mt-0.5">
-                      {viewingEnquiry.property?.name ||
-                        viewingEnquiry.property_id?.name ||
-                        viewingEnquiry.propertyName}
-                    </p>
-                    {viewingEnquiry.property?.price && (
-                      <p className="text-xs font-extrabold text-amber-800 mt-1">
-                        ₹ {Number(viewingEnquiry.property.price).toLocaleString("en-IN")}
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <p className="font-black text-slate-900 text-sm">
+                        {getSafeString(
+                          viewingEnquiry.property?.name ||
+                            viewingEnquiry.property_id?.name ||
+                            viewingEnquiry.propertyName,
+                          "Property"
+                        )}
                       </p>
-                    )}
+                      {viewingEnquiry.property?.price && (
+                        <p className="text-xs font-black text-slate-900">
+                          ₹ {Number(viewingEnquiry.property.price).toLocaleString("en-IN")}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 )}
 
-                {/* Client Message */}
+                {/* Client Message - Clean Even Style */}
                 {(viewingEnquiry.description || viewingEnquiry.message) && (
-                  <div>
+                  <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200/80 text-xs">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">
                       Customer Requirement / Remarks
                     </span>
-                    <p className="text-xs text-slate-700 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 leading-relaxed font-medium">
-                      "{viewingEnquiry.description || viewingEnquiry.message}"
+                    <p className="text-xs text-slate-700 leading-relaxed font-medium">
+                      "{getSafeString(viewingEnquiry.description || viewingEnquiry.message)}"
                     </p>
                   </div>
                 )}
 
-                {/* Quick Status Pill Action */}
-                <div className="pt-2">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                {/* Quick Pipeline Status Update - Clean Even Style */}
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
                     Quick Status Update
                   </span>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {["new", "contacted", "in_progress", "closed"].map((st) => (
-                      <Button
-                        key={st}
-                        size="sm"
-                        variant={viewingEnquiry.status === st ? "default" : "outline"}
-                        disabled={isUpdatingStatus}
-                        onClick={() => handleUpdateStatus(viewingEnquiry._id, st)}
-                        className={`rounded-xl text-[11px] font-bold h-8.5 capitalize ${
-                          viewingEnquiry.status === st
-                            ? "bg-slate-900 text-white"
-                            : "bg-white text-slate-700 hover:bg-slate-50 border-slate-200"
-                        }`}
-                      >
-                        {st.replace("_", " ")}
-                      </Button>
-                    ))}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    {[
+                      { id: "new", label: "New Lead" },
+                      { id: "contacted", label: "Contacted" },
+                      { id: "in_progress", label: "In Progress" },
+                      { id: "closed", label: "Closed" },
+                    ].map((st) => {
+                      const isActive =
+                        getSafeString(viewingEnquiry.status, "new").toLowerCase() ===
+                        st.id;
+                      return (
+                        <button
+                          key={st.id}
+                          type="button"
+                          disabled={isUpdatingStatus}
+                          onClick={() =>
+                            handleUpdateStatus(viewingEnquiry._id, st.id)
+                          }
+                          className={`rounded-xl text-[11px] font-bold h-9 border transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 select-none ${
+                            isActive
+                              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-950"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isActive ? "bg-white" : "bg-slate-300"
+                            }`}
+                          />
+                          <span>{st.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
+                {/* Quick Priority Update - Clean Even Style */}
+                <div className="pt-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1.5">
+                    Lead Priority
+                  </span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "low", label: "Low Priority" },
+                      { id: "medium", label: "Medium Priority" },
+                      { id: "high", label: "High Priority" },
+                    ].map((pr) => {
+                      const isActive =
+                        getSafeString(
+                          viewingEnquiry.priority,
+                          "medium"
+                        ).toLowerCase() === pr.id;
+                      return (
+                        <button
+                          key={pr.id}
+                          type="button"
+                          disabled={isUpdatingPriority}
+                          onClick={() =>
+                            handleUpdatePriority(viewingEnquiry._id, pr.id)
+                          }
+                          className={`rounded-xl text-xs font-bold h-9 border transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 select-none ${
+                            isActive
+                              ? "bg-slate-900 text-white border-slate-900 shadow-sm"
+                              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100 hover:text-slate-950"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isActive ? "bg-white" : "bg-slate-300"
+                            }`}
+                          />
+                          <span>{pr.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Dialog Footer Actions */}
                 <div className="flex gap-2 pt-2">
                   <Button
                     variant="outline"
@@ -915,14 +1183,14 @@ export default function AgentEnquiries() {
                       setViewingEnquiry(null);
                       handleOpenEdit(toEdit);
                     }}
-                    className="flex-1 rounded-2xl font-bold border-slate-200 text-slate-800 h-10"
+                    className="flex-1 rounded-2xl font-bold border-slate-200 text-slate-800 hover:bg-slate-100 hover:text-slate-950 h-10 text-xs"
                   >
-                    <Edit2 className="h-4 w-4 mr-1.5" />
-                    Edit Lead
+                    <Edit2 className="h-3.5 w-3.5 mr-1.5 text-slate-600" />
+                    Edit Full Lead
                   </Button>
                   <Button
                     onClick={() => setViewingEnquiry(null)}
-                    className="flex-1 rounded-2xl font-black bg-slate-900 hover:bg-slate-800 text-white h-10"
+                    className="flex-1 rounded-2xl font-black bg-slate-900 hover:bg-slate-800 text-white h-10 text-xs shadow-xs"
                   >
                     Done
                   </Button>
@@ -947,14 +1215,55 @@ export default function AgentEnquiries() {
                   Edit Enquiry
                 </div>
                 <DialogTitle className="font-heading font-black text-xl text-slate-950 mt-2">
-                  Update Lead for {editingEnquiry.name || "Customer"}
+                  Update Lead for {getSafeString(editingEnquiry.name, "Customer")}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-slate-500 font-medium">
-                  Update pipeline stage, lead priority, and agent follow-up notes.
+                  Update pipeline stage, lead priority, contact details, and agent notes.
                 </DialogDescription>
               </DialogHeader>
 
               <div className="space-y-4 mt-2">
+                {/* Client Name */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">
+                    Customer Name
+                  </label>
+                  <Input
+                    placeholder="Enter customer name..."
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="h-10 rounded-2xl border-slate-200 text-xs font-medium focus-visible:ring-primary/20"
+                  />
+                </div>
+
+                {/* Phone & Email Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Mobile Number
+                    </label>
+                    <Input
+                      placeholder="9876543210"
+                      value={editMobile}
+                      maxLength={10}
+                      onChange={(e) => setEditMobile(e.target.value.replace(/\D/g, ""))}
+                      className="h-10 rounded-2xl border-slate-200 text-xs font-medium focus-visible:ring-primary/20"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">
+                      Email Address
+                    </label>
+                    <Input
+                      type="email"
+                      placeholder="client@example.com"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      className="h-10 rounded-2xl border-slate-200 text-xs font-medium focus-visible:ring-primary/20"
+                    />
+                  </div>
+                </div>
+
                 {/* Pipeline Status */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700">
@@ -1068,7 +1377,7 @@ export default function AgentEnquiries() {
                 <DialogDescription className="text-xs text-slate-500 font-medium">
                   Are you sure you want to remove the enquiry from{" "}
                   <strong className="text-slate-900">
-                    "{deletingEnquiry.name || "Customer"}"
+                    "{getSafeString(deletingEnquiry.name, "Customer")}"
                   </strong>
                   ? This action will remove the lead from your CRM pipeline.
                 </DialogDescription>
@@ -1077,12 +1386,15 @@ export default function AgentEnquiries() {
               <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 text-xs text-slate-600 space-y-1 mt-2">
                 <p>
                   <strong>Property:</strong>{" "}
-                  {deletingEnquiry.property?.name ||
-                    deletingEnquiry.propertyName ||
-                    "General Enquiry"}
+                  {getSafeString(
+                    deletingEnquiry.property?.name ||
+                      deletingEnquiry.property_id?.name ||
+                      deletingEnquiry.propertyName,
+                    "General Enquiry"
+                  )}
                 </p>
                 <p>
-                  <strong>Phone:</strong> {deletingEnquiry.mobile || "N/A"}
+                  <strong>Phone:</strong> {getSafeString(deletingEnquiry.mobile || deletingEnquiry.phone, "N/A")}
                 </p>
               </div>
 

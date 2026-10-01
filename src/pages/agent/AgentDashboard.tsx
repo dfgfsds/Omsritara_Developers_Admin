@@ -50,7 +50,30 @@ export default function AgentDashboard() {
   const fetchDashboardData = async () => {
     setIsLoading(true);
     try {
-      // 1. Fetch scoped properties
+      // 1. Try dedicated Agent Dashboard Stats API
+      try {
+        const statsRes = await axiosInstance.get("/agent/dashboard-stats");
+        const dashData = statsRes.data?.data || statsRes.data?.result;
+        if (dashData && dashData.counts) {
+          setStats({
+            totalProperties: dashData.counts.totalProperties ?? 0,
+            availableProperties: dashData.counts.availableProperties ?? 0,
+            soldProperties: dashData.counts.soldProperties ?? 0,
+            totalEnquiries: dashData.counts.totalEnquiries ?? 0,
+          });
+          if (Array.isArray(dashData.recentProperties)) {
+            setRecentProperties(dashData.recentProperties.slice(0, 5));
+          }
+          if (Array.isArray(dashData.recentEnquiries)) {
+            setRecentEnquiries(dashData.recentEnquiries.slice(0, 5));
+          }
+          return;
+        }
+      } catch (err) {
+        // Fallback to separate endpoints if /agent/dashboard-stats is not yet implemented in backend
+      }
+
+      // 2. Fallback: Fetch scoped properties
       try {
         const propRes = await axiosInstance.get("/property", {
           params: currentAgentId ? { created_by: currentAgentId } : undefined,
@@ -82,7 +105,7 @@ export default function AgentDashboard() {
         console.warn("Could not fetch properties:", err);
       }
 
-      // 2. Fetch scoped enquiries
+      // 3. Fallback: Fetch scoped enquiries
       try {
         const enqRes = await axiosInstance.get("/enquiry");
         const rawEnqs =
@@ -102,7 +125,11 @@ export default function AgentDashboard() {
                 propObj?.created_by ||
                 e.created_by?._id ||
                 e.created_by;
-              return String(ownerId) === String(currentAgentId);
+              const agentId = e.agent?._id || e.agent;
+              return (
+                String(ownerId) === String(currentAgentId) ||
+                String(agentId) === String(currentAgentId)
+              );
             })
           : allEnqs;
 
@@ -172,7 +199,10 @@ export default function AgentDashboard() {
       {/* KPI Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
         {/* Total Properties */}
-        <div className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group">
+        <div
+          onClick={() => navigate("/agent/properties?status=all")}
+          className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-700 ring-1 ring-rose-200/60">
               <Building2 className="h-6 w-6" />
@@ -191,7 +221,8 @@ export default function AgentDashboard() {
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
             <Link
-              to="/agent/properties"
+              to="/agent/properties?status=all"
+              onClick={(e) => e.stopPropagation()}
               className="text-xs font-bold text-rose-700 hover:text-rose-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
             >
               Manage Listings <ArrowUpRight className="h-3.5 w-3.5" />
@@ -200,7 +231,10 @@ export default function AgentDashboard() {
         </div>
 
         {/* Available Properties */}
-        <div className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group">
+        <div
+          onClick={() => navigate("/agent/properties?status=available")}
+          className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/60">
               <CheckCircle2 className="h-6 w-6" />
@@ -219,7 +253,8 @@ export default function AgentDashboard() {
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
             <Link
-              to="/agent/properties"
+              to="/agent/properties?status=available"
+              onClick={(e) => e.stopPropagation()}
               className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
             >
               View Active <ArrowUpRight className="h-3.5 w-3.5" />
@@ -228,7 +263,10 @@ export default function AgentDashboard() {
         </div>
 
         {/* Sold Properties */}
-        <div className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group">
+        <div
+          onClick={() => navigate("/agent/properties?status=sold")}
+          className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-700 ring-1 ring-amber-200/60">
               <TrendingUp className="h-6 w-6" />
@@ -246,14 +284,24 @@ export default function AgentDashboard() {
             </p>
           </div>
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">
-              Successful Transactions
+            <Link
+              to="/agent/properties?status=sold"
+              onClick={(e) => e.stopPropagation()}
+              className="text-xs font-bold text-amber-700 hover:text-amber-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
+            >
+              View Sold <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+            <span className="text-[11px] font-semibold text-slate-400">
+              Transactions
             </span>
           </div>
         </div>
 
         {/* Total Enquiries */}
-        <div className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group">
+        <div
+          onClick={() => navigate("/agent/enquiries")}
+          className="relative overflow-hidden rounded-3xl bg-white p-5 border border-slate-200/80 shadow-sm hover:shadow-md transition-all group cursor-pointer"
+        >
           <div className="flex items-center justify-between">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-700 ring-1 ring-sky-200/60">
               <MessageCircle className="h-6 w-6" />
@@ -273,6 +321,7 @@ export default function AgentDashboard() {
           <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
             <Link
               to="/agent/enquiries"
+              onClick={(e) => e.stopPropagation()}
               className="text-xs font-bold text-sky-700 hover:text-sky-800 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform"
             >
               View Recent Leads <ArrowUpRight className="h-3.5 w-3.5" />

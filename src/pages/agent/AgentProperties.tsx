@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   Building2,
   Plus,
@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Clock,
   Tag,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -42,9 +43,11 @@ import axiosInstance from "@/lib/axiosInstance";
 import { useAuth } from "@/context/AuthContext";
 import { PropertyFormDialog } from "@/components/properties/form/PropertyFormDialog";
 import { usePropertyFormState } from "@/components/properties/usePropertyFormState";
+import { getAllLocalDrafts, removeLocalDraft } from "@/utils/propertyDraftStorage";
 
 export default function AgentProperties() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { userData, currentAgent } = useAuth();
   const currentAgentId =
     userData?._id ||
@@ -54,7 +57,17 @@ export default function AgentProperties() {
   const [properties, setProperties] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const s = searchParams.get("status");
+    return s && s !== "all" ? s : "available";
+  });
+
+  useEffect(() => {
+    const s = searchParams.get("status");
+    if (s && s !== "all") {
+      setStatusFilter(s);
+    }
+  }, [searchParams]);
   const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
 
   // Delete Dialog
@@ -67,10 +80,16 @@ export default function AgentProperties() {
   // 5-Step Guided Form State & Modal
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const formState = usePropertyFormState({
+    isOpen: isFormModalOpen,
     initialAgentId: currentAgentId,
     initialAgentName: currentAgent?.name || userData?.name,
-    onSuccess: () => {
+    onSuccess: (savedObj?: any) => {
       setIsFormModalOpen(false);
+      if (savedObj?.status === "draft") {
+        setStatusFilter("draft");
+      } else {
+        setStatusFilter("available");
+      }
       fetchMyProperties();
     },
   });
@@ -78,25 +97,73 @@ export default function AgentProperties() {
   const fetchMyProperties = async () => {
     setIsLoading(true);
     try {
-      const res = await axiosInstance.get("/property", {
-        params: currentAgentId ? { created_by: currentAgentId } : undefined,
+      let myProps: any[] = [];
+      try {
+        const res = await axiosInstance.get("/property", {
+          params: currentAgentId ? { created_by: currentAgentId } : undefined,
+          skipAuthRedirect: true,
+        } as any);
+        const list =
+          res.data?.result ||
+          res.data?.data ||
+          (Array.isArray(res.data) ? res.data : []);
+        const allProps = Array.isArray(list) ? list : [];
+
+        // Strict Zero-Trust Client-Side Scoping:
+        // Show ONLY properties created by THIS agent
+        myProps = currentAgentId
+          ? allProps.filter((p: any) => {
+              const ownerId = p.created_by?._id || p.created_by;
+              return String(ownerId) === String(currentAgentId);
+            })
+          : allProps;
+      } catch (apiErr: any) {
+        console.warn("Could not fetch server properties, loading local drafts:", apiErr);
+      }
+
+      // Collect all local drafts (stored in localStorage)
+      const allDrafts = getAllLocalDrafts();
+      const scopedDrafts = allDrafts.filter((d) => {
+        if (!currentAgentId) return true;
+        if (d.draftId === `agent_${currentAgentId}` || d.draftId === "new") return true;
+        if (d.formData?.agent_id && String(d.formData.agent_id) === String(currentAgentId)) return true;
+        return !d.draftId.startsWith("agent_") || d.draftId === `agent_${currentAgentId}`;
       });
-      const list =
-        res.data?.result ||
-        res.data?.data ||
-        (Array.isArray(res.data) ? res.data : []);
-      const allProps = Array.isArray(list) ? list : [];
 
-      // Strict Zero-Trust Client-Side Scoping:
-      // Show ONLY properties created by THIS agent
-      const myProps = currentAgentId
-        ? allProps.filter((p: any) => {
-            const ownerId = p.created_by?._id || p.created_by;
-            return String(ownerId) === String(currentAgentId);
-          })
-        : allProps;
+      const localDraftProperties = scopedDrafts.map((d) => {
+        const f = d.formData || ({} as any);
+        return {
+          _id: d.propertyId || `local_draft_${d.draftId}`,
+          name: d.name || f.name || "Untitled Property Draft",
+          type: f.type || "Apartment",
+          price: f.price ? Number(f.price) : 0,
+          location: {
+            city: f.city || "Draft City",
+            area: f.area || "",
+            address: f.address || "",
+            state: f.state || "Tamil Nadu",
+            country: f.country || "India",
+            pincode: f.pincode || "",
+          },
+          status: "draft",
+          listing_type: f.listing_type || "sale",
+          area_size: f.area_size || 0,
+          area_unit: f.area_unit || "sqft",
+          image_url: Array.isArray(f.image_url) ? f.image_url : [],
+          created_by: currentAgentId,
+          createdAt: d.lastSavedAt || new Date(d.timestamp).toISOString(),
+          updatedAt: d.lastSavedAt || new Date(d.timestamp).toISOString(),
+          isLocalDraft: true,
+          localDraftId: d.draftId,
+          localDraftData: d,
+        };
+      });
 
-      setProperties(myProps);
+      // Avoid duplicates: if server already returned a property that has local draft ID
+      const localPropIds = new Set(scopedDrafts.map((d) => d.propertyId).filter(Boolean));
+      const remainingServerProps = myProps.filter((p: any) => !localPropIds.has(p._id));
+
+      setProperties([...localDraftProperties, ...remainingServerProps]);
     } catch (err: any) {
       toast({
         title: "Error Loading Properties",
@@ -133,7 +200,27 @@ export default function AgentProperties() {
     if (!deleteId) return;
     setIsDeleting(true);
     try {
-      await axiosInstance.delete(`/property/${deleteId}`);
+      // Discard formState draft so it never re-saves
+      formState.handleDiscardDraft();
+
+      if (deleteId.startsWith("local_draft_") || deleteId.startsWith("agent_") || deleteId === "new") {
+        const cleanKey = deleteId.replace("local_draft_", "");
+        removeLocalDraft(cleanKey);
+        removeLocalDraft(deleteId);
+        removeLocalDraft("new");
+        if (currentAgentId) removeLocalDraft(`agent_${currentAgentId}`);
+        toast({
+          title: "Draft Deleted",
+          description: "Local draft listing removed successfully.",
+        });
+        setDeleteId(null);
+        await fetchMyProperties();
+        return;
+      }
+      removeLocalDraft(deleteId);
+      removeLocalDraft("new");
+      if (currentAgentId) removeLocalDraft(`agent_${currentAgentId}`);
+      await axiosInstance.delete(`/property/${deleteId}`, { skipAuthRedirect: true } as any);
       toast({
         title: "Property Deleted",
         description: "The property listing has been removed successfully.",
@@ -160,12 +247,126 @@ export default function AgentProperties() {
         (p.location?.city && p.location.city.toLowerCase().includes(q)) ||
         (p.location?.area && p.location.area.toLowerCase().includes(q));
 
-      const matchesStatus =
-        statusFilter === "all" || p.status === statusFilter;
+      const matchesStatus = p.status === statusFilter;
 
       return matchesSearch && matchesStatus;
     });
   }, [properties, searchTerm, statusFilter]);
+
+  const handlePublish = async (propertyId: string) => {
+    const targetProp = properties.find((p) => p._id === propertyId);
+    if (!targetProp) return;
+
+    // Direct publish for local drafts
+    if (targetProp.isLocalDraft) {
+      const f = targetProp.localDraftData?.formData || {};
+      // If essential basic fields are missing, open the modal for agent
+      if (!f.name?.trim() || !f.city?.trim()) {
+        await formState.populateForEdit(targetProp);
+        setIsFormModalOpen(true);
+        toast({
+          title: "Complete Property Details",
+          description: "Please enter property name and city location to publish.",
+        });
+        return;
+      }
+
+      try {
+        const payload: any = {
+          name: f.name.trim(),
+          listing_type: f.listing_type || "sale",
+          description: f.description?.trim() || undefined,
+          location: {
+            country: f.country?.trim() || "India",
+            state: f.state?.trim() || "Tamil Nadu",
+            city: f.city?.trim() || "Chennai",
+            area: f.area?.trim() || "",
+            address: f.address?.trim() || "",
+            pincode: f.pincode?.trim() || undefined,
+          },
+          area_size: f.area_size ? Number(f.area_size) : 1,
+          area_unit: f.area_unit || "sqft",
+          price: f.price ? Number(f.price) : 0,
+          image_url: Array.isArray(f.image_url) ? f.image_url : [],
+          status: "available",
+        };
+        if (f.type) {
+          payload.type = typeof f.type === "object" ? f.type._id : f.type;
+        } else if (formState.propertyTypes && formState.propertyTypes.length > 0) {
+          payload.type = formState.propertyTypes[0]._id;
+        }
+
+        if (currentAgentId && /^[0-9a-fA-F]{24}$/.test(currentAgentId)) {
+          payload.created_by = currentAgentId;
+        }
+
+        try {
+          await axiosInstance.post("/property", payload, { skipAuthRedirect: true } as any);
+        } catch (postErr: any) {
+          const errMsg = String(postErr?.response?.data?.msg || postErr?.response?.data?.message || "");
+          if (errMsg.includes("created_by") && payload.created_by) {
+            delete payload.created_by;
+            await axiosInstance.post("/property", payload, { skipAuthRedirect: true } as any);
+          } else {
+            throw postErr;
+          }
+        }
+
+        // Clean up from localStorage
+        removeLocalDraft(targetProp.localDraftId || targetProp._id);
+        removeLocalDraft("new");
+        if (currentAgentId) removeLocalDraft(`agent_${currentAgentId}`);
+
+        toast({
+          title: "Draft Published Successfully!",
+          description: `"${payload.name}" is now live under Available listings.`,
+        });
+        setStatusFilter("available");
+        await fetchMyProperties();
+        return;
+      } catch (err: any) {
+        console.warn("Direct publish failed, opening form modal:", err);
+        await formState.populateForEdit(targetProp);
+        setIsFormModalOpen(true);
+        toast({
+          title: "Details Needed to Publish",
+          description: err.response?.data?.msg || "Please review and complete required details to publish.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Direct publish for server drafts
+    try {
+      try {
+        await axiosInstance.put(
+          `/property/${propertyId}/publish`,
+          { status: "available" },
+          { skipAuthRedirect: true } as any
+        );
+      } catch (e) {
+        await axiosInstance.put(
+          `/property/${propertyId}`,
+          { status: "available" },
+          { skipAuthRedirect: true } as any
+        );
+      }
+      removeLocalDraft(propertyId);
+      toast({
+        title: "Draft Published Successfully!",
+        description: "The property has been published and is now live under Available listings.",
+      });
+      setStatusFilter("available");
+      await fetchMyProperties();
+    } catch (err: any) {
+      toast({
+        title: "Publish Failed",
+        description: err.response?.data?.msg || err.message || "Failed to publish property.",
+        variant: "destructive",
+      });
+    }
+  };
 
   const counts = useMemo(() => {
     return {
@@ -175,6 +376,7 @@ export default function AgentProperties() {
         (p) => p.status === "under_construction"
       ).length,
       sold: properties.filter((p) => p.status === "sold").length,
+      draft: properties.filter((p) => p.status === "draft").length,
     };
   }, [properties]);
 
@@ -216,30 +418,18 @@ export default function AgentProperties() {
         </div>
       </div>
 
-      {/* 4 Soft Metric Overview Cards */}
+      {/* 4 Status Metric Overview Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
-        {/* Total Listings */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-sky-50/30 to-blue-50/50 p-4 sm:p-5 border border-sky-100/80 shadow-xs hover:shadow-md transition-all duration-200">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              Total Portfolio
-            </span>
-            <div className="h-9 w-9 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center shadow-2xs">
-              <Building2 className="h-4 w-4" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline gap-2">
-            <span className="text-2xl sm:text-3xl font-black text-slate-900 font-heading">
-              {counts.all}
-            </span>
-            <span className="text-[11px] font-semibold text-slate-400">
-              listings
-            </span>
-          </div>
-        </div>
 
         {/* Available Listings */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/50 p-4 sm:p-5 border border-emerald-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+        <div
+          onClick={() => setStatusFilter("available")}
+          className={`rounded-3xl bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+            statusFilter === "available"
+              ? "border-emerald-500 ring-2 ring-emerald-500/20 shadow-md"
+              : "border-emerald-100/80 shadow-xs hover:shadow-md"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
               Available
@@ -259,7 +449,14 @@ export default function AgentProperties() {
         </div>
 
         {/* Under Construction */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-amber-50/30 to-orange-50/50 p-4 sm:p-5 border border-amber-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+        <div
+          onClick={() => setStatusFilter("under_construction")}
+          className={`rounded-3xl bg-gradient-to-br from-white via-amber-50/30 to-orange-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+            statusFilter === "under_construction"
+              ? "border-amber-500 ring-2 ring-amber-500/20 shadow-md"
+              : "border-amber-100/80 shadow-xs hover:shadow-md"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-800 uppercase tracking-wider">
               Under Dev
@@ -278,8 +475,42 @@ export default function AgentProperties() {
           </div>
         </div>
 
+        {/* Draft Listings */}
+        <div
+          onClick={() => setStatusFilter("draft")}
+          className={`rounded-3xl bg-gradient-to-br from-white via-purple-50/30 to-indigo-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+            statusFilter === "draft"
+              ? "border-purple-500 ring-2 ring-purple-500/20 shadow-md"
+              : "border-purple-100/80 shadow-xs hover:shadow-md"
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-purple-800 uppercase tracking-wider">
+              Drafts
+            </span>
+            <div className="h-9 w-9 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center shadow-2xs">
+              <Sparkles className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline gap-2">
+            <span className="text-2xl sm:text-3xl font-black text-purple-950 font-heading">
+              {counts.draft}
+            </span>
+            <span className="text-[11px] font-semibold text-purple-600">
+              in progress
+            </span>
+          </div>
+        </div>
+
         {/* Sold Listings */}
-        <div className="rounded-3xl bg-gradient-to-br from-white via-rose-50/30 to-pink-50/50 p-4 sm:p-5 border border-rose-100/80 shadow-xs hover:shadow-md transition-all duration-200">
+        <div
+          onClick={() => setStatusFilter("sold")}
+          className={`rounded-3xl bg-gradient-to-br from-white via-rose-50/30 to-pink-50/50 p-4 sm:p-5 border transition-all duration-200 cursor-pointer ${
+            statusFilter === "sold"
+              ? "border-rose-500 ring-2 ring-rose-500/20 shadow-md"
+              : "border-rose-100/80 shadow-xs hover:shadow-md"
+          }`}
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-rose-800 uppercase tracking-wider">
               Sold Out
@@ -303,27 +534,30 @@ export default function AgentProperties() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 rounded-3xl bg-white p-4 border border-slate-200/80 shadow-xs">
         {/* Search Input */}
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-          <Input
-            placeholder="Search your properties by title, area, city..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 h-10 rounded-2xl border-slate-200 text-xs font-medium"
-          />
+          <div className="relative flex items-center">
+            <Search className="absolute left-3.5 h-4 w-4 text-slate-500 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search properties by title, area, city..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full h-11 pl-10 pr-10 rounded-2xl bg-slate-100 hover:bg-slate-100/90 focus:bg-white border-2 border-slate-200/90 focus:border-primary text-slate-950 font-bold text-xs sm:text-sm placeholder:text-slate-400 placeholder:font-normal focus:ring-4 focus:ring-primary/10 transition-all outline-none"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute right-3 h-6 w-6 rounded-full bg-slate-200 hover:bg-slate-300 text-slate-600 flex items-center justify-center transition-colors"
+                title="Clear search"
+              >
+                <X className="h-3.5 w-3.5 stroke-[2.5]" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Status Filters */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <button
-            onClick={() => setStatusFilter("all")}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-              statusFilter === "all"
-                ? "bg-slate-900 text-white shadow-xs"
-                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-            }`}
-          >
-            All ({counts.all})
-          </button>
           <button
             onClick={() => setStatusFilter("available")}
             className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
@@ -343,6 +577,16 @@ export default function AgentProperties() {
             }`}
           >
             Under Construction ({counts.under_construction})
+          </button>
+          <button
+            onClick={() => setStatusFilter("draft")}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+              statusFilter === "draft"
+                ? "bg-purple-600 text-white shadow-xs"
+                : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+            }`}
+          >
+            Drafts ({counts.draft})
           </button>
           <button
             onClick={() => setStatusFilter("sold")}
@@ -391,9 +635,9 @@ export default function AgentProperties() {
             No Properties Found
           </h3>
           <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            {searchTerm || statusFilter !== "all"
-              ? "No listings match your current filters. Try resetting search."
-              : "You haven't added any properties yet. Click below to add your first property."}
+            {searchTerm
+              ? "No listings match your search query."
+              : `No properties found in ${statusFilter.replace(/_/g, " ")}. Click below to add a property.`}
           </p>
           <Button
             onClick={handleOpenAdd}
@@ -431,6 +675,8 @@ export default function AgentProperties() {
                       ? "bg-emerald-600 text-white"
                       : property.status === "sold"
                       ? "bg-rose-600 text-white"
+                      : property.status === "draft"
+                      ? "bg-purple-600 text-white"
                       : "bg-amber-600 text-white"
                   }`}
                 >
@@ -468,6 +714,17 @@ export default function AgentProperties() {
                   </div>
 
                   <div className="flex items-center gap-1.5">
+                    {property.status === "draft" && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handlePublish(property._id)}
+                        className="h-8 w-8 p-0 rounded-xl text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                        title="Publish Draft"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -561,6 +818,8 @@ export default function AgentProperties() {
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                           : prop.status === "sold"
                           ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : prop.status === "draft"
+                          ? "bg-purple-50 text-purple-700 border-purple-200"
                           : "bg-amber-50 text-amber-700 border-amber-200"
                       }`}
                     >
@@ -569,6 +828,17 @@ export default function AgentProperties() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
+                      {prop.status === "draft" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePublish(prop._id)}
+                          className="h-8 w-8 p-0 rounded-xl text-emerald-600 hover:bg-emerald-50"
+                          title="Publish Draft"
+                        >
+                          <CheckCircle2 className="h-4 w-4" />
+                        </Button>
+                      )}
                       <Button
                         variant="ghost"
                         size="sm"
@@ -714,6 +984,17 @@ export default function AgentProperties() {
         handleSubmit={(e) =>
           formState.handleSubmit(e, currentAgentId, currentAgent?.name || userData?.name)
         }
+        handleSaveDraft={() =>
+          formState.handleSaveDraft(currentAgentId, currentAgent?.name || userData?.name)
+        }
+        autoSaveStatus={formState.autoSaveStatus}
+        lastSavedTime={formState.lastSavedTime}
+        isRestoredDraft={formState.isRestoredDraft}
+        onDiscardDraft={() => {
+          formState.handleDiscardDraft();
+          fetchMyProperties();
+        }}
+        hasUnsavedChanges={formState.hasUnsavedChanges}
         handleInputChange={formState.handleInputChange}
         handleLocationChange={formState.handleLocationChange}
         handlePropertyTypeChange={formState.handlePropertyTypeChange}
